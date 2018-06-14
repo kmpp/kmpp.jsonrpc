@@ -1,0 +1,130 @@
+buildscript {
+    apply from: 'versions.gradle'
+
+    repositories {
+        maven { url "https://kotlin.bintray.com/kotlinx" }
+        jcenter()
+    }
+
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "org.jetbrains.kotlinx:kotlinx-gradle-serialization-plugin:$serialization_version"
+    }
+}
+
+plugins {
+    id "com.jfrog.bintray" version '1.8.0'
+}
+
+allprojects {
+    group 'com.github.kmpp'
+    version '0.1.0'
+
+    repositories {
+        maven { url "https://kotlin.bintray.com/kotlinx" }
+        jcenter()
+    }
+}
+
+apply plugin: "kotlin"
+
+subprojects {
+
+    apply plugin: 'kotlinx-serialization'
+    apply plugin: 'maven-publish'
+    apply plugin: 'com.jfrog.bintray'
+
+    afterEvaluate {
+        task sourceJar(type: Jar, dependsOn: classes) {
+            classifier 'sources'
+            from sourceSets.main.kotlin
+            duplicatesStrategy = "exclude"
+            def platformSrc = sourceSets.main.kotlin
+            def commonSrc = project(':common').sourceSets.main.kotlin
+            from (platformSrc + commonSrc)
+        }
+
+        task javadocJar(type: Jar, dependsOn: javadoc) {
+            classifier = 'javadoc'
+            from javadoc.destinationDir
+        }
+    }
+
+    def varintName = "${project.name}"
+    tasks.withType(Jar) {
+        archivesBaseName = varintName
+    }
+
+    // Create the pom configuration:
+    def pomConfig = {
+        name "kmpp.jsonrpc"
+        description "kmpp.jsonrpc $version - Kotlin multiplatform JSON-RPC serialization"
+        url "https://github.com/kmpp/kmpp.jsonrpc"
+
+        scm {
+            url "https://github.com/kmpp/kmpp.jsonrpc/tree/master"
+            connection "scm:git:git://github.com/kmpp/kmpp.jsonrpc.git"
+            developerConnection "scm:git:ssh://github.com:kmpp/kmpp.jsonrpc.git"
+        }
+        licenses {
+            license {
+                name "The Apache Software License, Version 2.0"
+                url "http://www.apache.org/licenses/LICENSE-2.0.txt"
+            }
+        }
+        developers {
+            developer {
+                id "abissell"
+                name "Andrew Bissell"
+                email "abissell@gmail.com"
+            }
+        }
+    }
+
+    publishing {
+        publications {
+            mavenProject(MavenPublication) {
+                from components.java
+                groupId project.group
+                artifactId varintName
+                version project.version
+
+                pom.withXml {
+                    def root = asNode()
+                    root.appendNode('description', "kmpp.jsonrpc $version - Kotlin multiplatform JSON-RPC serialization")
+                    root.children().last() + pomConfig
+                }
+
+                artifact sourceJar {
+                    classifier "sources"
+                }
+
+                artifact javadocJar {
+                    classifier "javadoc"
+                }
+            }
+        }
+    }
+
+    bintray {
+        user = System.getProperty('bintray.user')
+        key = System.getProperty('bintray.key')
+        publications = ['mavenProject']
+        pkg {
+            repo = 'kmpp.jsonrpc'
+            name = 'kmpp.jsonrpc'
+            userOrg = 'kmpp'
+            licenses = ['Apache-2.0']
+            vcsUrl = 'https://github.com/kmpp/kmpp.jsonrpc'
+            websiteUrl = 'https://github.com/kmpp/kmpp.jsonrpc'
+            issueTrackerUrl = 'https://github.com/kmpp/kmpp.jsonrpc/issues'
+
+            githubRepo = 'kmpp/kmpp.jsonrpc'
+            version {
+                name = project.version
+                desc = "kmpp.jsonrpc - Kotlin multiplatform JSON-RPC serialization"
+                released = new Date()
+            }
+        }
+    }
+}

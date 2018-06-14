@@ -1,0 +1,4 @@
+rootProject.name = 'kmpp.jsonrpc'
+include ':common'
+include ':jvm'
+include ':js'
