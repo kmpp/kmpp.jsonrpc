@@ -1,5 +1,9 @@
 apply plugin: 'kotlin-platform-jvm'
 
+compileKotlin {
+    kotlinOptions.freeCompilerArgs += ["-Xprogressive"]
+}
+
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     compile "org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version"

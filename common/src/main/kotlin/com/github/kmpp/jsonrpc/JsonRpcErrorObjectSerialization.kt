@@ -4,7 +4,6 @@ import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonLiteral
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import com.github.kmpp.jsonrpc.jsonast.JsonString
-import com.github.kmpp.jsonrpc.jsonast.JsonTreeMapper
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialClassDesc
@@ -48,8 +47,8 @@ object JsonRpcErrorObjectSerialLoader : KSerialLoader<JsonRpcErrorObject<JsonEle
         old: JsonRpcErrorObject<JsonElement>
     ): JsonRpcErrorObject<JsonElement> = throw UpdateNotSupportedException("Update not supported")
 
-    fun <E> withDataLoader(loader: KSerialLoader<E>): KSerialLoader<JsonRpcErrorObject<E>> =
-        JsonRpcErrorObjectSerialLoaderForDataType(loader)
+    fun <E> withDataConverter(converter: (JsonElement) -> E): KSerialLoader<JsonRpcErrorObject<E>> =
+        JsonRpcErrorObjectSerialLoaderForDataType(converter)
 }
 
 internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> {
@@ -70,10 +69,6 @@ internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> 
 internal class JsonRpcErrorObjectSerialLoaderForDataType<E>(
     private val dataConverter: (JsonElement) -> E
 ) : KSerialLoader<JsonRpcErrorObject<E>> {
-    constructor(serialLoader: KSerialLoader<E>) : this({ jsonElement ->
-        JsonTreeMapper().readTree(jsonElement, serialLoader)
-    })
-
     override fun load(input: KInput): JsonRpcErrorObject<E> {
         val untyped = JsonRpcErrorObjectSerialLoader.load(input)
         return JsonRpcErrorObject(untyped.code, untyped.message, untyped.data?.let(dataConverter))
@@ -82,53 +77,3 @@ internal class JsonRpcErrorObjectSerialLoaderForDataType<E>(
     override fun update(input: KInput, old: JsonRpcErrorObject<E>): JsonRpcErrorObject<E> =
         throw UnsupportedOperationException("Update not supported")
 }
-
-/*
-open class JsonRpcErrorObjectKSerializer<E>(
-    private val eSerializer: KSerializer<E>
-) : KSerializer<JsonRpcErrorObject<E>> {
-    override fun save(output: KOutput, obj: JsonRpcErrorObject<E>) {
-        @Suppress("NAME_SHADOWING")
-        val output = output.writeBegin(serialClassDesc)
-
-        output.writeIntElementValue(serialClassDesc, 0, obj.code)
-        output.writeStringElementValue(serialClassDesc, 1, obj.message)
-        obj.data?.let { output.writeSerializableElementValue(serialClassDesc, 2, eSerializer, it) }
-
-        output.writeEnd(serialClassDesc)
-    }
-
-    override fun load(input: KInput): JsonRpcErrorObject<E> {
-        @Suppress("NAME_SHADOWING")
-        val input = input.readBegin(serialClassDesc)
-
-        var readElement = input.readElement(serialClassDesc)
-        check(readElement == 0) { "'code' read element $readElement, should be 0" }
-        val code = input.readIntElementValue(serialClassDesc, 0)
-
-        readElement = input.readElement(serialClassDesc)
-        check(readElement == 1) { "'message' read element $readElement, should be 1" }
-        val message = input.readStringElementValue(serialClassDesc, 1)
-
-        readElement = input.readElement(serialClassDesc)
-        val data: E? = if (readElement == 2) { // 'data' property was present
-            input.readSerializableElementValue(serialClassDesc, 2, eSerializer)
-        } else {
-            null
-        }
-
-        input.readEnd(serialClassDesc)
-
-        return JsonRpcErrorObject(code, message, data)
-    }
-
-    override val serialClassDesc: KSerialClassDesc =
-        SerialClassDescImpl("com.blubber.message.JsonRpcErrorObject").apply {
-            addElement("code")
-            addElement("message")
-            addElement("data")
-        }
-}
-
-object JsonRpcErrorObjectSerializer : JsonRpcErrorObjectKSerializer<String>(StringSerializer)
-*/
