@@ -31,7 +31,7 @@ internal inline fun <reified E : JsonElement> JsonObject.getRequired(
 internal fun JsonObject.checkJsonrpc() {
     this.getRequired<JsonString>("jsonrpc", JsonObject::getAsValue).let { jsonString ->
         require(jsonString.str == JSON_RPC) {
-            "$JSON_RPC is only supported non-null value for \"jsonrpc\""
+            "\"$JSON_RPC\" is only supported non-null value for \"jsonrpc\""
         }
     }
 }
@@ -48,13 +48,13 @@ internal class JsonParseException(msg: String) : SerializationException(msg)
 internal class InvalidRequestException(msg: String, val id: JsonRpcID?) :
     SerializationException(msg)
 
+// id is non-null: if we receive invalid params on a Notification we don't send an error response
 internal class InvalidParamsException(msg: String, val id: JsonRpcID) : SerializationException(msg)
 
 private val JSON_TREE_MAPPER = JsonTreeMapper()
 
-fun <T> KSerialLoader<T>.treeMapper(): (JsonElement) -> T = { jsonElement ->
-    JSON_TREE_MAPPER.readTree(jsonElement, this)
-}
+val <T> KSerialLoader<T>.tree: (JsonElement) -> T
+    get() = { jsonElement -> JSON_TREE_MAPPER.readTree(jsonElement, this) }
 
 val <E> ((JsonElement) -> E).array: (JsonElement) -> List<E>
     get() = { (it as JsonArray).content.map(this) }

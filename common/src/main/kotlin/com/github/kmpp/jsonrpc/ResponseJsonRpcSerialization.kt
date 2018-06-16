@@ -1,5 +1,6 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.jsonast.JSON
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import kotlinx.serialization.KInput
@@ -19,7 +20,7 @@ private val serialClassDesc = SerialClassDescImpl("com.github.kmpp.jsonrpc.Respo
         addElement("id")
     }
 
-class ResultJsonRpcSerialSaver<R>(
+class ResultJsonRpcSaver<R>(
     private val resultSaver: KSerialSaver<R>
 ) : KSerialSaver<ResultJsonRpc<R>> {
     override fun save(output: KOutput, obj: ResultJsonRpc<R>) {
@@ -36,7 +37,7 @@ object StringErrorJsonRpcSerialSaver :
     KSerialSaver<ErrorJsonRpc<String>> by ErrorJsonRpcSerialSaver(StringSerializer)
 
 class ErrorJsonRpcSerialSaver<E>(errorDataSaver: KSerialSaver<E>) : KSerialSaver<ErrorJsonRpc<E>> {
-    private val errorObjectSaver = JsonRpcErrorObjectSerialSaver(errorDataSaver)
+    private val errorObjectSaver = JsonRpcErrorObjectSaver(errorDataSaver)
 
     override fun save(output: KOutput, obj: ErrorJsonRpc<E>) {
         @Suppress("NAME_SHADOWING")
@@ -60,7 +61,7 @@ class ResponseJsonRpcSaver<R, E>(
     }
 }
 
-object ServerJsonRpcSerialLoader : KSerialLoader<ResponseJsonRpc<JsonElement, JsonElement>> {
+object ResponseJsonRpcLoader : KSerialLoader<ResponseJsonRpc<JsonElement, JsonElement>> {
     override fun load(input: KInput): ResponseJsonRpc<JsonElement, JsonElement> {
         val tree = input.to<JsonObject>()
 
@@ -88,19 +89,19 @@ object ServerJsonRpcSerialLoader : KSerialLoader<ResponseJsonRpc<JsonElement, Js
     fun <R, E> withParsers(
         resultParser: (JsonElement) -> R,
         errorDataParser: (JsonElement) -> E
-    ): KSerialLoader<ResponseJsonRpc<R, E>> = ServerJsonRpcSerialLoaderForResultAndErrorTypes(
+    ): KSerialLoader<ResponseJsonRpc<R, E>> = ResponseJsonRpcLoaderWithResultAndErrorParsers(
         resultParser,
         errorDataParser
     )
 }
 
-internal class ServerJsonRpcSerialLoaderForResultAndErrorTypes<R, E>(
+internal class ResponseJsonRpcLoaderWithResultAndErrorParsers<R, E>(
     private val resultParser: (JsonElement) -> R,
     private val errorDataParser: (JsonElement) -> E
 ) : KSerialLoader<ResponseJsonRpc<R, E>> {
 
     override fun load(input: KInput): ResponseJsonRpc<R, E> {
-        val untyped = ServerJsonRpcSerialLoader.load(input)
+        val untyped = ResponseJsonRpcLoader.load(input)
         return when (untyped) {
             is ResultJsonRpc<JsonElement> -> {
                 @Suppress("UNCHECKED_CAST")
@@ -122,3 +123,23 @@ internal class ServerJsonRpcSerialLoaderForResultAndErrorTypes<R, E>(
     override fun update(input: KInput, old: ResponseJsonRpc<R, E>): ResponseJsonRpc<R, E> =
         throw UpdateNotSupportedException("Update not supported")
 }
+
+fun <R, E> saveResponseJsonRpc(
+    saver: KSerialSaver<ResponseJsonRpc<R, E>>,
+    response: ResponseJsonRpc<R, E>
+): String = JSON.stringify(saver, response)
+
+fun <R> saveResultJsonRpc(
+    saver: KSerialSaver<ResultJsonRpc<R>>,
+    result: ResultJsonRpc<R>
+): String = JSON.stringify(saver, result)
+
+fun <E> saveErrorJsonRpc(
+    saver: KSerialSaver<ErrorJsonRpc<E>>,
+    error: ErrorJsonRpc<E>
+): String = JSON.stringify(saver, error)
+
+fun <R, E> loadResponseJsonRpc(
+    loader: KSerialLoader<ResponseJsonRpc<R, E>>,
+    json: String
+): ResponseJsonRpc<R, E> = JSON.parse(loader, json)

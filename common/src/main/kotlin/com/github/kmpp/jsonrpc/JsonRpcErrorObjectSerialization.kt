@@ -20,7 +20,7 @@ private val serialClassDesc: KSerialClassDesc =
         addElement("data")
     }
 
-class JsonRpcErrorObjectSerialSaver<E>(
+class JsonRpcErrorObjectSaver<E>(
     private val dataSaver: KSerialSaver<E>
 ) : KSerialSaver<JsonRpcErrorObject<E>> {
     override fun save(output: KOutput, obj: JsonRpcErrorObject<E>) {
@@ -35,7 +35,7 @@ class JsonRpcErrorObjectSerialSaver<E>(
     }
 }
 
-object JsonRpcErrorObjectSerialLoader : KSerialLoader<JsonRpcErrorObject<JsonElement>> {
+object JsonRpcErrorObjectLoader : KSerialLoader<JsonRpcErrorObject<JsonElement>> {
     override fun load(input: KInput): JsonRpcErrorObject<JsonElement> {
         val tree = input.to<JsonObject>()
 
@@ -48,7 +48,7 @@ object JsonRpcErrorObjectSerialLoader : KSerialLoader<JsonRpcErrorObject<JsonEle
     ): JsonRpcErrorObject<JsonElement> = throw UpdateNotSupportedException("Update not supported")
 
     fun <E> withDataParser(parser: (JsonElement) -> E): KSerialLoader<JsonRpcErrorObject<E>> =
-        JsonRpcErrorObjectSerialLoaderForData(parser)
+        JsonRpcErrorObjectLoaderWithDataParser(parser)
 }
 
 internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> {
@@ -66,11 +66,11 @@ internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> 
     return JsonRpcErrorObject(code, message, data)
 }
 
-internal class JsonRpcErrorObjectSerialLoaderForData<E>(
+internal class JsonRpcErrorObjectLoaderWithDataParser<E>(
     private val dataParser: (JsonElement) -> E
 ) : KSerialLoader<JsonRpcErrorObject<E>> {
     override fun load(input: KInput): JsonRpcErrorObject<E> {
-        val untyped = JsonRpcErrorObjectSerialLoader.load(input)
+        val untyped = JsonRpcErrorObjectLoader.load(input)
         return JsonRpcErrorObject(untyped.code, untyped.message, untyped.data?.let(dataParser))
     }
 

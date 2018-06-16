@@ -52,5 +52,5 @@ internal object JsonRpcIDSerializer : KSerializer<JsonRpcID> {
     }
 
     override val serialClassDesc: KSerialClassDesc =
-        SerialClassDescImpl("com.blubber.message.JsonRpcID")
+        SerialClassDescImpl("com.github.kmpp.JsonRpcID")
 }

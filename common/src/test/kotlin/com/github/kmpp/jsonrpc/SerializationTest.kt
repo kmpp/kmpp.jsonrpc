@@ -1,6 +1,9 @@
 package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.jsonast.JSON
+import com.github.kmpp.jsonrpc.jsonast.JsonNull
+import com.github.kmpp.jsonrpc.jsonast.JsonTreeMapper
+import com.github.kmpp.jsonrpc.jsonast.JsonTreeParser
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.KSerializer
@@ -33,7 +36,7 @@ class SerializationTest {
     @Test
     fun testClientJsonRpcSerialization() {
         val saver = RequestJsonRpcSaver(Data.serializer())
-        val loader = RequestJsonRpcLoader.withParamsParser(Data.serializer().treeMapper())
+        val loader = RequestJsonRpcLoader.withParamsParser(Data.serializer().tree)
 
         roundtrip(saver, loader, ClientRequestJsonRpc("method", Data(), JsonRpcID("id")))
         roundtrip(saver, loader, ClientRequestJsonRpc("m", Data(nullable = "nullable"), JsonRpcNullID))
@@ -74,9 +77,9 @@ class SerializationTest {
 
     @Test
     fun testJsonRpcErrorObjectSerialization() {
-        val saver = JsonRpcErrorObjectSerialSaver(Data.serializer())
+        val saver = JsonRpcErrorObjectSaver(Data.serializer())
         val loader =
-            JsonRpcErrorObjectSerialLoader.withDataParser(Data.serializer().treeMapper())
+            JsonRpcErrorObjectLoader.withDataParser(Data.serializer().tree)
 
         roundtrip(saver, loader, JsonRpcErrorObject<Data>(42, message = "message", data = null))
         roundtrip(saver, loader, JsonRpcErrorObject(42, message = "message", data = Data()))
@@ -84,6 +87,9 @@ class SerializationTest {
             roundtrip(saver, loader, """{"code":42,"message":"message"}"""),
             JsonRpcErrorObject<Data>(code = 42, message = "message", data = null)
         )
+
+        val serverErrorObject = JsonRpcErrorObject.serverError(-32099, Data())
+        roundtrip(saver, loader, serverErrorObject)
     }
 
     @Serializable
@@ -95,12 +101,12 @@ class SerializationTest {
     @Test
     fun testServerJsonRpcSerialization() {
         val resultSaver: KSerialSaver<ResultJsonRpc<Result>> =
-            ResultJsonRpcSerialSaver(resultSaver = Result.serializer())
+            ResultJsonRpcSaver(resultSaver = Result.serializer())
         val errorSaver: KSerialSaver<ErrorJsonRpc<Data>> =
             ErrorJsonRpcSerialSaver(errorDataSaver = Data.serializer())
-        val loader = ServerJsonRpcSerialLoader.withParsers(
-            resultParser = Result.serializer().treeMapper(),
-            errorDataParser = Data.serializer().treeMapper()
+        val loader = ResponseJsonRpcLoader.withParsers(
+            resultParser = Result.serializer().tree,
+            errorDataParser = Data.serializer().tree
         )
 
         roundtrip(
@@ -175,8 +181,8 @@ class SerializationTest {
         loader: KSerialLoader<ResponseJsonRpc<R, E>>,
         obj: ResultJsonRpc<R>
     ) {
-        val str = JSON.stringify(saver, obj)
-        val parsed = JSON.parse(loader, str) as ResultJsonRpc<R>
+        val str = saveResultJsonRpc(saver, obj)
+        val parsed = loadResponseJsonRpc(loader, str) as ResultJsonRpc<R>
         assertEquals(obj, parsed)
     }
 
@@ -185,12 +191,28 @@ class SerializationTest {
         loader: KSerialLoader<ResponseJsonRpc<R, E>>,
         obj: ErrorJsonRpc<E>
     ) {
-        val str = JSON.stringify(saver, obj)
-        val parsed = JSON.parse(loader, str) as ErrorJsonRpc<E>
+        val str = saveErrorJsonRpc(saver, obj)
+        val parsed = loadResponseJsonRpc(loader, str) as ErrorJsonRpc<E>
         assertEquals(obj, parsed)
     }
 
     private fun <T> parse(loader: KSerialLoader<T>, json: String): T {
         return JSON.parse(loader, json)
+    }
+
+    @Test
+    fun testUtilityParsers() {
+        val nullElem = JsonNull
+        assertEquals("null", PrimitiveParser(nullElem).str)
+        val stringElem = JsonTreeParser("\"Lucy & Pierre\"").readFully()
+        assertEquals("Lucy & Pierre", StringParser(stringElem))
+        val booleanElem = JsonTreeParser("true").readFully()
+        assertEquals(true, BooleanParser(booleanElem))
+        val intElem = JsonTreeParser("20171207").readFully()
+        assertEquals(20171207, IntParser(intElem))
+        val longElem = JsonTreeParser("10000000000000").readFully()
+        assertEquals(10000000000000, LongParser(longElem))
+        val doubleElem = JsonTreeParser("2016.0224").readFully()
+        assertEquals(2016.0224, DoubleParser(doubleElem))
     }
 }

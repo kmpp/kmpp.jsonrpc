@@ -40,7 +40,7 @@ class RequestJsonRpcSaver<P>(
     }
 }
 
-internal object RequestJsonRpcLoader : KSerialLoader<RequestJsonRpc<JsonElement>> {
+object RequestJsonRpcLoader : KSerialLoader<RequestJsonRpc<JsonElement>> {
     override fun load(input: KInput): RequestJsonRpc<JsonElement> {
         val tree = try {
             input.to<JsonObject>()
@@ -87,7 +87,7 @@ internal object RequestJsonRpcLoader : KSerialLoader<RequestJsonRpc<JsonElement>
     ): RequestJsonRpc<JsonElement> = throw UnsupportedOperationException("Update not supported")
 
     fun <P> withParamsParser(parser: (JsonElement) -> P): KSerialLoader<RequestJsonRpc<P>> =
-        RequestJsonRpcSerialLoaderWithParamsParser(parser)
+        RequestJsonRpcLoaderWithParamsParser(parser)
 }
 
 fun <P> saveRequestJsonRpc(saver: KSerialSaver<RequestJsonRpc<P>>, request: RequestJsonRpc<P>) =
@@ -152,7 +152,7 @@ private fun <T : RequestJsonRpc<P>, P> RequestJsonRpc<JsonElement>.tryParseParam
     return this.toType(params)
 }
 
-private class RequestJsonRpcSerialLoaderWithParamsParser<P>(
+private class RequestJsonRpcLoaderWithParamsParser<P>(
     private val paramsParser: (JsonElement) -> P
 ) : KSerialLoader<RequestJsonRpc<P>> {
 

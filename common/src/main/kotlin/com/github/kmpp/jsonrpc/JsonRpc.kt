@@ -24,6 +24,7 @@ data class NotificationJsonRpc<P>(
     override val params: P? = null
 ) : RequestJsonRpc<P>(method, params)
 
+@Suppress("unused") // IntelliJ incorrectly reads type params as unused
 sealed class ResponseJsonRpc<R, E>(
     open val id: JsonRpcID
 ) : JsonRpc()
@@ -85,13 +86,13 @@ object JsonRpcNullID : JsonRpcID() {
     override fun toString() = "JsonRpcNullID(id=null)"
 }
 
+@Suppress("unused")
 sealed class ParsingResult<T> {
     companion object {
         fun <T : RequestJsonRpc<P>, P> valid(message: T): ParsingResult<T> = ParsingSuccess(message)
 
         @Suppress("UNCHECKED_CAST")
-        fun <P> error(error: ParsingError): ParsingResult<P> =
-            error as ParsingResult<P>
+        fun <P> error(error: ParsingError): ParsingResult<P> = error as ParsingResult<P>
     }
 }
 
