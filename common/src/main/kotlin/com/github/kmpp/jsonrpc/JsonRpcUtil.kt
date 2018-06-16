@@ -22,7 +22,9 @@ internal inline fun <reified E : JsonElement> JsonObject.getRequired(
     val elem = this.getElem(key)
     return when (elem) {
         is E -> elem
-        else -> throw SerializationException("$elem JSON type did not match expected ${E::class}")
+        else -> throw SerializationException(
+            "element[$elem] JSON type did not match expected ${E::class}"
+        )
     }
 }
 

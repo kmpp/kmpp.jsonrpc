@@ -20,7 +20,6 @@ class SerializationTest {
         val string: String = "string"
     )
 
-    /*
     @Test
     fun testJsonRpcIDSerialization() {
         roundtrip(JsonRpcIDSerializer, JsonRpcNullID)
@@ -33,23 +32,23 @@ class SerializationTest {
 
     @Test
     fun testClientJsonRpcSerialization() {
-        val saver = ClientJsonRpcSerialSaver(Data.serializer())
-        val loader = ClientJsonRpcSerialLoader.withParamsParser(Data.serializer().treeMapper())
+        val saver = RequestJsonRpcSaver(Data.serializer())
+        val loader = RequestJsonRpcLoader.withParamsParser(Data.serializer().treeMapper())
 
-        roundtrip(saver, loader, RequestJsonRpc("method", Data(), JsonRpcID("id")))
-        roundtrip(saver, loader, RequestJsonRpc("m", Data(nullable = "nullable"), JsonRpcNullID))
+        roundtrip(saver, loader, ClientRequestJsonRpc("method", Data(), JsonRpcID("id")))
+        roundtrip(saver, loader, ClientRequestJsonRpc("m", Data(nullable = "nullable"), JsonRpcNullID))
         assertEquals(
             parse(
                 loader,
                 """{"jsonrpc":"2.0","method":"m","params":{"i":123,"d":123.456,"string":"string"},"id":"id"}"""
             ),
-            RequestJsonRpc("m", Data(), JsonRpcID("id"))
+            ClientRequestJsonRpc("m", Data(), JsonRpcID("id"))
         )
         assertEquals(
             roundtrip(
                 saver, loader, """{"jsonrpc":"2.0","method":"m","id":"id"}"""
             ),
-            RequestJsonRpc<Data>("m", null, JsonRpcID("id"))
+            ClientRequestJsonRpc<Data>("m", null, JsonRpcID("id"))
         )
         assertFailsWith(SerializationException::class) {
             parse(
@@ -95,7 +94,10 @@ class SerializationTest {
 
     @Test
     fun testServerJsonRpcSerialization() {
-        val resultSaver = ResultJsonRpcSerialSaver(resultSaver = Result.serializer())
+        val resultSaver: KSerialSaver<ResultJsonRpc<Result>> =
+            ResultJsonRpcSerialSaver(resultSaver = Result.serializer())
+        val errorSaver: KSerialSaver<ErrorJsonRpc<Data>> =
+            ErrorJsonRpcSerialSaver(errorDataSaver = Data.serializer())
         val loader = ServerJsonRpcSerialLoader.withParsers(
             resultParser = Result.serializer().treeMapper(),
             errorDataParser = Data.serializer().treeMapper()
@@ -107,9 +109,9 @@ class SerializationTest {
             )
         )
         roundtrip(
-            saver, loader, ErrorJsonRpc(
+            errorSaver, loader, ErrorJsonRpc(
                 error = JsonRpcErrorObject(42, "error!", Data()), id = JsonRpcNullID
-            ).withResultType()
+            )
         )
 
         assertEquals(
@@ -120,7 +122,7 @@ class SerializationTest {
             ResultJsonRpc(
                 result = Result(10_000L, listOf("heynow")),
                 id = JsonRpcID("id")
-            ).withErrorType()
+            ).coerceErrorType()
         )
         assertEquals(
             parse(
@@ -134,7 +136,7 @@ class SerializationTest {
                     data = Data(42, 0.0, nullable = "present", string = "o")
                 ),
                 id = JsonRpcID("id")
-            ).withResultType()
+            ).coerceResultType()
         )
         assertEquals(
             parse(
@@ -144,7 +146,7 @@ class SerializationTest {
             ErrorJsonRpc(
                 error = JsonRpcErrorObject<Data>(code = 42, message = "eek", data = null),
                 id = JsonRpcID("id")
-            ).withResultType()
+            ).coerceResultType()
         )
 
         assertFailsWith(SerializationException::class) {
@@ -155,7 +157,7 @@ class SerializationTest {
     private fun <T> roundtrip(serializer: KSerializer<T>, obj: T) =
         roundtrip(serializer, serializer, obj)
 
-    private fun <T : U, U> roundtrip(saver: KSerialSaver<T>, loader: KSerialLoader<U>, obj: T) {
+    private fun <T> roundtrip(saver: KSerialSaver<T>, loader: KSerialLoader<T>, obj: T) {
         val str = JSON.stringify(saver, obj)
         val parsed = JSON.parse(loader, str)
         assertEquals(obj, parsed)
@@ -168,8 +170,27 @@ class SerializationTest {
         return obj
     }
 
+    private fun <R, E> roundtrip(
+        saver: KSerialSaver<ResultJsonRpc<R>>,
+        loader: KSerialLoader<ResponseJsonRpc<R, E>>,
+        obj: ResultJsonRpc<R>
+    ) {
+        val str = JSON.stringify(saver, obj)
+        val parsed = JSON.parse(loader, str) as ResultJsonRpc<R>
+        assertEquals(obj, parsed)
+    }
+
+    private fun <R, E> roundtrip(
+        saver: KSerialSaver<ErrorJsonRpc<E>>,
+        loader: KSerialLoader<ResponseJsonRpc<R, E>>,
+        obj: ErrorJsonRpc<E>
+    ) {
+        val str = JSON.stringify(saver, obj)
+        val parsed = JSON.parse(loader, str) as ErrorJsonRpc<E>
+        assertEquals(obj, parsed)
+    }
+
     private fun <T> parse(loader: KSerialLoader<T>, json: String): T {
         return JSON.parse(loader, json)
     }
-    */
 }

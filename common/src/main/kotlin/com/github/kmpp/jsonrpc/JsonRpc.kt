@@ -8,40 +8,40 @@ sealed class JsonRpc(
     val jsonrpc: String = JSON_RPC
 )
 
-sealed class ClientJsonRpc<P>(
+sealed class RequestJsonRpc<P>(
     open val method: String,
     open val params: P? = null
 ) : JsonRpc()
 
-data class RequestJsonRpc<P>(
+data class ClientRequestJsonRpc<P>(
     override val method: String,
     override val params: P? = null,
     val id: JsonRpcID
-) : ClientJsonRpc<P>(method, params)
+) : RequestJsonRpc<P>(method, params)
 
 data class NotificationJsonRpc<P>(
     override val method: String,
     override val params: P? = null
-) : ClientJsonRpc<P>(method, params)
+) : RequestJsonRpc<P>(method, params)
 
-sealed class ServerJsonRpc<R, E>(
+sealed class ResponseJsonRpc<R, E>(
     open val id: JsonRpcID
 ) : JsonRpc()
 
 data class ResultJsonRpc<R>(
     val result: R,
     override val id: JsonRpcID
-) : ServerJsonRpc<R, Any>(id) {
+) : ResponseJsonRpc<R, Any>(id) {
     @Suppress("UNCHECKED_CAST")
-    inline fun <reified E> withErrorType() = this as ServerJsonRpc<R, E>
+    inline fun <reified E> coerceErrorType() = this as ResponseJsonRpc<R, E>
 }
 
 data class ErrorJsonRpc<E>(
     val error: JsonRpcErrorObject<E>,
     override val id: JsonRpcID
-) : ServerJsonRpc<Any, E>(id) {
+) : ResponseJsonRpc<Any, E>(id) {
     @Suppress("UNCHECKED_CAST")
-    inline fun <reified R> withResultType() = this as ServerJsonRpc<R, E>
+    inline fun <reified R> coerceResultType() = this as ResponseJsonRpc<R, E>
 }
 
 data class JsonRpcErrorObject<E>(
@@ -87,7 +87,7 @@ object JsonRpcNullID : JsonRpcID() {
 
 sealed class ParsingResult<T> {
     companion object {
-        fun <T : ClientJsonRpc<P>, P> valid(message: T): ParsingResult<T> = ParsingSuccess(message)
+        fun <T : RequestJsonRpc<P>, P> valid(message: T): ParsingResult<T> = ParsingSuccess(message)
 
         @Suppress("UNCHECKED_CAST")
         fun <P> error(error: ParsingError): ParsingResult<P> =
@@ -95,7 +95,7 @@ sealed class ParsingResult<T> {
     }
 }
 
-data class ParsingSuccess<T : ClientJsonRpc<P>, P> internal constructor(
+data class ParsingSuccess<T : RequestJsonRpc<P>, P> internal constructor(
     val message: T
 ) : ParsingResult<T>()
 
@@ -103,8 +103,11 @@ sealed class ParsingError(
     open val details: String?,
     open val id: JsonRpcID
 ) : ParsingResult<Any>() {
-    val stringErrorJson: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        JSON.stringify(StringErrorJsonRpcSerialSaver, ErrorJsonRpc(this.toErrorObject(), id))
+    val stringError by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        ErrorJsonRpc(this.toErrorObject(), id)
+    }
+    val stringErrorJson by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        JSON.stringify(StringErrorJsonRpcSerialSaver, stringError)
     }
 
     fun toErrorObject(): JsonRpcErrorObject<String> = when (this) {

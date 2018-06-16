@@ -13,38 +13,35 @@ import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.internal.SerialClassDescImpl
 
 private val serialClassDesc: KSerialClassDesc =
-    SerialClassDescImpl("com.github.kmpp.jsonrpc.ClientJsonRpc").apply {
+    SerialClassDescImpl("com.github.kmpp.jsonrpc.RequestJsonRpc").apply {
         addElement("jsonrpc")
         addElement("method")
         addElement("params")
         addElement("id")
     }
 
-class ClientJsonRpcSerialSaver<P>(
+class RequestJsonRpcSaver<P>(
     private val paramsSaver: KSerialSaver<P>
-) : KSerialSaver<ClientJsonRpc<P>> {
-    override fun save(output: KOutput, obj: ClientJsonRpc<P>) {
+) : KSerialSaver<RequestJsonRpc<P>> {
+    override fun save(output: KOutput, obj: RequestJsonRpc<P>) {
         @Suppress("NAME_SHADOWING")
         val output = output.writeBegin(serialClassDesc)
 
         output.writeStringElementValue(serialClassDesc, 0, obj.jsonrpc)
         output.writeStringElementValue(serialClassDesc, 1, obj.method)
-        obj.params?.let { tParams ->
-            output.writeSerializableElementValue(serialClassDesc, 2, paramsSaver, tParams)
+        obj.params?.let {
+            output.writeSerializableElementValue(serialClassDesc, 2, paramsSaver, it)
         }
-        if (obj is RequestJsonRpc<*>) {
-            output.writeSerializableElementValue(
-                serialClassDesc, 3,
-                JsonRpcIDSerializer, obj.id
-            )
+        if (obj is ClientRequestJsonRpc<P>) {
+            output.writeSerializableElementValue(serialClassDesc, 3, JsonRpcIDSerializer, obj.id)
         }
 
         output.writeEnd(serialClassDesc)
     }
 }
 
-internal object ClientJsonRpcSerialLoader : KSerialLoader<ClientJsonRpc<JsonElement>> {
-    override fun load(input: KInput): ClientJsonRpc<JsonElement> {
+internal object RequestJsonRpcLoader : KSerialLoader<RequestJsonRpc<JsonElement>> {
+    override fun load(input: KInput): RequestJsonRpc<JsonElement> {
         val tree = try {
             input.to<JsonObject>()
         } catch (e: Exception) {
@@ -80,24 +77,25 @@ internal object ClientJsonRpcSerialLoader : KSerialLoader<ClientJsonRpc<JsonElem
             }
         }
 
-        return id?.let { RequestJsonRpc(method, params, id) } ?: NotificationJsonRpc(method, params)
+        return id?.let { ClientRequestJsonRpc(method, params, id) }
+                ?: NotificationJsonRpc(method, params)
     }
 
     override fun update(
         input: KInput,
-        old: ClientJsonRpc<JsonElement>
-    ): ClientJsonRpc<JsonElement> = throw UnsupportedOperationException("Update not supported")
+        old: RequestJsonRpc<JsonElement>
+    ): RequestJsonRpc<JsonElement> = throw UnsupportedOperationException("Update not supported")
 
-    fun <P> withParamsParser(parser: (JsonElement) -> P): KSerialLoader<ClientJsonRpc<P>> =
-        ClientJsonRpcSerialLoaderForParams(parser)
+    fun <P> withParamsParser(parser: (JsonElement) -> P): KSerialLoader<RequestJsonRpc<P>> =
+        RequestJsonRpcSerialLoaderWithParamsParser(parser)
 }
 
-fun <P> saveClientJsonRpc(saver: KSerialSaver<ClientJsonRpc<P>>, rpc: ClientJsonRpc<P>) =
-    JSON.stringify(saver, rpc)
+fun <P> saveRequestJsonRpc(saver: KSerialSaver<RequestJsonRpc<P>>, request: RequestJsonRpc<P>) =
+    JSON.stringify(saver, request)
 
-fun loadClientJsonRpc(json: String): ParsingResult<ClientJsonRpc<JsonElement>> {
+fun loadRequestJsonRpc(json: String): ParsingResult<RequestJsonRpc<JsonElement>> {
     return try {
-        val parsed = JSON.parse(ClientJsonRpcSerialLoader, json)
+        val parsed = JSON.parse(RequestJsonRpcLoader, json)
         ParsingResult.valid(parsed)
     } catch (e: Exception) {
         ParsingResult.error(convertToError(e))
@@ -116,68 +114,58 @@ private fun convertToError(e: Exception): ParsingError {
     }
 }
 
-private fun CharSequence.firstLine() = this.lines().first()
+private fun CharSequence.firstLine() = this.lines().firstOrNull()
 
-fun <P> RequestJsonRpc<JsonElement>.parseRequestParams(
+fun <P> ClientRequestJsonRpc<JsonElement>.parseRequestParams(parser: (JsonElement) -> P) =
+    this.parseParams(parser) { ClientRequestJsonRpc(method, params?.let(parser), id) }
+
+fun <P> NotificationJsonRpc<JsonElement>.parseNotificationParams(parser: (JsonElement) -> P) =
+    this.parseParams(parser) { NotificationJsonRpc(method, params?.let(parser)) }
+
+private fun <T : RequestJsonRpc<P>, P> RequestJsonRpc<JsonElement>.parseParams(
     parser: (JsonElement) -> P,
-    toType: RequestJsonRpc<JsonElement>.(P?) -> RequestJsonRpc<P>
-): ParsingResult<RequestJsonRpc<P>> = parseParams(parser) { parsedParams: P? ->
-    toType(parsedParams)
-}
-
-fun <P> NotificationJsonRpc<JsonElement>.parseNotificationParams(
-    parser: (JsonElement) -> P,
-    toType: NotificationJsonRpc<JsonElement>.(P?) -> NotificationJsonRpc<P>
-): ParsingResult<NotificationJsonRpc<P>> = parseParams(parser) { parsedParams: P? ->
-    toType(parsedParams)
-}
-
-
-fun <T : ClientJsonRpc<P>, P> ClientJsonRpc<JsonElement>.parseParams(
-    parser: (JsonElement) -> P,
-    toType: ClientJsonRpc<JsonElement>.(P?) -> T
+    toType: RequestJsonRpc<JsonElement>.(P?) -> T
 ): ParsingResult<T> {
     return try {
-        ParsingResult.valid(tryParseParams(this, parser, toType))
+        ParsingResult.valid(tryParseParams(parser, toType))
     } catch (e: InvalidParamsException) {
         ParsingResult.error(InvalidParams(e.message, e.id))
     }
 }
 
-private fun <T : ClientJsonRpc<P>, P> tryParseParams(
-    obj: ClientJsonRpc<JsonElement>,
+private fun <T : RequestJsonRpc<P>, P> RequestJsonRpc<JsonElement>.tryParseParams(
     parser: (JsonElement) -> P,
-    toType: ClientJsonRpc<JsonElement>.(P?) -> T
+    toType: RequestJsonRpc<JsonElement>.(P?) -> T
 ): T {
-    val params = obj.params?.let { jsonElement ->
+    val params = params?.let { jsonElement ->
         try {
             parser(jsonElement)
         } catch (e: Exception) {
-            val id = when (obj) {
-                is RequestJsonRpc<JsonElement> -> obj.id
+            val id = when (this) {
+                is ClientRequestJsonRpc<JsonElement> -> id
                 is NotificationJsonRpc<JsonElement> -> JsonRpcNullID
             }
             throw InvalidParamsException("Unable to load params: ${e.message}", id)
         }
     }
 
-    return obj.toType(params)
+    return this.toType(params)
 }
 
-private class ClientJsonRpcSerialLoaderForParams<P>(
+private class RequestJsonRpcSerialLoaderWithParamsParser<P>(
     private val paramsParser: (JsonElement) -> P
-) : KSerialLoader<ClientJsonRpc<P>> {
+) : KSerialLoader<RequestJsonRpc<P>> {
 
-    override fun load(input: KInput): ClientJsonRpc<P> {
-        val untyped = ClientJsonRpcSerialLoader.load(input)
-        return tryParseParams(untyped, paramsParser) { parsedParams: P? ->
+    override fun load(input: KInput): RequestJsonRpc<P> {
+        val untyped = RequestJsonRpcLoader.load(input)
+        return untyped.tryParseParams(paramsParser) { parsedParams: P? ->
             when (this) {
-                is RequestJsonRpc -> RequestJsonRpc(method, parsedParams, id)
+                is ClientRequestJsonRpc -> ClientRequestJsonRpc(method, parsedParams, id)
                 is NotificationJsonRpc -> NotificationJsonRpc(method, parsedParams)
             }
         }
     }
 
-    override fun update(input: KInput, old: ClientJsonRpc<P>): ClientJsonRpc<P> =
+    override fun update(input: KInput, old: RequestJsonRpc<P>): RequestJsonRpc<P> =
         throw UnsupportedOperationException("Update not supported")
 }
