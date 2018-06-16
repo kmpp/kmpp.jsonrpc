@@ -21,7 +21,7 @@ private val serialClassDesc: KSerialClassDesc =
     }
 
 class JsonRpcErrorObjectSerialSaver<E>(
-    private val eSaver: KSerialSaver<E>
+    private val dataSaver: KSerialSaver<E>
 ) : KSerialSaver<JsonRpcErrorObject<E>> {
     override fun save(output: KOutput, obj: JsonRpcErrorObject<E>) {
         @Suppress("NAME_SHADOWING")
@@ -29,7 +29,7 @@ class JsonRpcErrorObjectSerialSaver<E>(
 
         output.writeIntElementValue(serialClassDesc, 0, obj.code)
         output.writeStringElementValue(serialClassDesc, 1, obj.message)
-        obj.data?.let { output.writeSerializableElementValue(serialClassDesc, 2, eSaver, it) }
+        obj.data?.let { output.writeSerializableElementValue(serialClassDesc, 2, dataSaver, it) }
 
         output.writeEnd(serialClassDesc)
     }
@@ -47,31 +47,31 @@ object JsonRpcErrorObjectSerialLoader : KSerialLoader<JsonRpcErrorObject<JsonEle
         old: JsonRpcErrorObject<JsonElement>
     ): JsonRpcErrorObject<JsonElement> = throw UpdateNotSupportedException("Update not supported")
 
-    fun <E> withDataConverter(converter: (JsonElement) -> E): KSerialLoader<JsonRpcErrorObject<E>> =
-        JsonRpcErrorObjectSerialLoaderForDataType(converter)
+    fun <E> withDataParser(parser: (JsonElement) -> E): KSerialLoader<JsonRpcErrorObject<E>> =
+        JsonRpcErrorObjectSerialLoaderForData(parser)
 }
 
 internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> {
-    val codeElem = this.getRequired<JsonLiteral>(JsonObject::getAsValue, "code")
+    val codeElem = this.getRequired<JsonLiteral>("code", JsonObject::getAsValue)
     val code = try {
         codeElem.asInt
     } catch (e: NumberFormatException) {
         throw SerializationException(e.toString())
     }
 
-    val message = this.getRequired<JsonString>(JsonObject::getAsValue, "message").str
+    val message = this.getRequired<JsonString>("message", JsonObject::getAsValue).str
 
     val data = this["data"]
 
     return JsonRpcErrorObject(code, message, data)
 }
 
-internal class JsonRpcErrorObjectSerialLoaderForDataType<E>(
-    private val dataConverter: (JsonElement) -> E
+internal class JsonRpcErrorObjectSerialLoaderForData<E>(
+    private val dataParser: (JsonElement) -> E
 ) : KSerialLoader<JsonRpcErrorObject<E>> {
     override fun load(input: KInput): JsonRpcErrorObject<E> {
         val untyped = JsonRpcErrorObjectSerialLoader.load(input)
-        return JsonRpcErrorObject(untyped.code, untyped.message, untyped.data?.let(dataConverter))
+        return JsonRpcErrorObject(untyped.code, untyped.message, untyped.data?.let(dataParser))
     }
 
     override fun update(input: KInput, old: JsonRpcErrorObject<E>): JsonRpcErrorObject<E> =

@@ -1,5 +1,7 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.jsonast.JSON
+
 const val JSON_RPC = "2.0"
 
 sealed class JsonRpc(
@@ -49,19 +51,19 @@ data class JsonRpcErrorObject<E>(
 ) {
     companion object {
         fun <E> parseError(data: E? = null): JsonRpcErrorObject<E> =
-                JsonRpcErrorObject(code = -32700, message = "Parse error", data = data)
+            JsonRpcErrorObject(code = -32700, message = "Parse error", data = data)
 
         fun <E> invalidRequest(data: E? = null): JsonRpcErrorObject<E> =
-                JsonRpcErrorObject(code = -32600, message = "Invalid Request", data = data)
+            JsonRpcErrorObject(code = -32600, message = "Invalid Request", data = data)
 
         fun <E> methodNotFound(data: E? = null): JsonRpcErrorObject<E> =
-                JsonRpcErrorObject(code = -32601, message = "Method not found", data = data)
+            JsonRpcErrorObject(code = -32601, message = "Method not found", data = data)
 
         fun <E> invalidParams(data: E? = null): JsonRpcErrorObject<E> =
-                JsonRpcErrorObject(code = -32602, message = "Invalid params", data = data)
+            JsonRpcErrorObject(code = -32602, message = "Invalid params", data = data)
 
         fun <E> internalError(data: E? = null): JsonRpcErrorObject<E> =
-                JsonRpcErrorObject(code = -32603, message = "Internal error", data = data)
+            JsonRpcErrorObject(code = -32603, message = "Internal error", data = data)
 
         fun <E> serverError(code: Int, data: E? = null): JsonRpcErrorObject<E> {
             require(code in -32099..-32000) { "code=$code outside JSON-RPC server error range" }
@@ -76,24 +78,35 @@ sealed class JsonRpcID {
         operator fun invoke(id: Long) = JsonRpcNumberID(id)
     }
 }
+
 data class JsonRpcStringID internal constructor(val id: String) : JsonRpcID()
 data class JsonRpcNumberID internal constructor(val id: Long) : JsonRpcID()
 object JsonRpcNullID : JsonRpcID() {
     override fun toString() = "JsonRpcNullID(id=null)"
 }
 
-@Suppress("DataClassPrivateConstructor")
-data class ClientJsonRpcResult<P> private constructor(
-    val result: ClientJsonRpc<P>? = null,
-    val error: ClientJsonRpcError? = null
-) {
+sealed class ParsingResult<T> {
     companion object {
-        fun <P> valid(result: ClientJsonRpc<P>) = ClientJsonRpcResult(result = result)
-        fun <P> error(error: ClientJsonRpcError) = ClientJsonRpcResult<P>(error = error)
+        fun <T : ClientJsonRpc<P>, P> valid(message: T): ParsingResult<T> = ParsingSuccess(message)
+
+        @Suppress("UNCHECKED_CAST")
+        fun <P> error(error: ParsingError): ParsingResult<P> =
+            error as ParsingResult<P>
     }
 }
 
-sealed class ClientJsonRpcError(open val details: String?) {
+data class ParsingSuccess<T : ClientJsonRpc<P>, P> internal constructor(
+    val message: T
+) : ParsingResult<T>()
+
+sealed class ParsingError(
+    open val details: String?,
+    open val id: JsonRpcID
+) : ParsingResult<Any>() {
+    val stringErrorJson: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        JSON.stringify(StringErrorJsonRpcSerialSaver, ErrorJsonRpc(this.toErrorObject(), id))
+    }
+
     fun toErrorObject(): JsonRpcErrorObject<String> = when (this) {
         is ParseError -> JsonRpcErrorObject.parseError(details)
         is InvalidRequest -> JsonRpcErrorObject.invalidRequest(details)
@@ -101,7 +114,22 @@ sealed class ClientJsonRpcError(open val details: String?) {
         is InternalError -> JsonRpcErrorObject.internalError(details)
     }
 }
-data class ParseError(override val details: String?) : ClientJsonRpcError(details)
-data class InvalidRequest(override val details: String?) : ClientJsonRpcError(details)
-data class InvalidParams(override val details: String?) : ClientJsonRpcError(details)
-data class InternalError(override val details: String?) : ClientJsonRpcError(details)
+
+data class ParseError(
+    override val details: String?
+) : ParsingError(details, JsonRpcNullID)
+
+data class InvalidRequest(
+    override val details: String?,
+    override val id: JsonRpcID
+) : ParsingError(details, id)
+
+data class InvalidParams(
+    override val details: String?,
+    override val id: JsonRpcID
+) : ParsingError(details, id)
+
+data class InternalError(
+    override val details: String?
+) : ParsingError(details, JsonRpcNullID)
+

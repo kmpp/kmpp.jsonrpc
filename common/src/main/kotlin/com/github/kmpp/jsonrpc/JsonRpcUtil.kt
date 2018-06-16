@@ -1,7 +1,6 @@
 package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.jsonast.JSON
-import com.github.kmpp.jsonrpc.jsonast.JsonNull
 import com.github.kmpp.jsonrpc.jsonast.JsonArray
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
@@ -12,9 +11,9 @@ import kotlinx.serialization.KInput
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.SerializationException
 
-inline fun <reified E : JsonElement> JsonObject.getRequired(
-    getElem: JsonObject.(String) -> JsonElement,
-    key: String
+internal inline fun <reified E : JsonElement> JsonObject.getRequired(
+    key: String,
+    getElem: JsonObject.(String) -> JsonElement
 ): E {
     if (key !in this) {
         throw SerializationException("Did not find \"$key\" in tree")
@@ -27,15 +26,15 @@ inline fun <reified E : JsonElement> JsonObject.getRequired(
     }
 }
 
-fun JsonObject.checkJsonrpc() {
-    this.getRequired<JsonString>(JsonObject::getAsValue, "jsonrpc").let { jsonString ->
+internal fun JsonObject.checkJsonrpc() {
+    this.getRequired<JsonString>("jsonrpc", JsonObject::getAsValue).let { jsonString ->
         require(jsonString.str == JSON_RPC) {
             "$JSON_RPC is only supported non-null value for \"jsonrpc\""
         }
     }
 }
 
-inline fun <reified E : JsonElement> KInput.to(): E {
+internal inline fun <reified E : JsonElement> KInput.to(): E {
     val jsonReader = this as? JSON.JsonInput
             ?: throw SerializationException("This class can be loaded only by JSON")
     return jsonReader.readAsTree() as? E
@@ -43,8 +42,11 @@ inline fun <reified E : JsonElement> KInput.to(): E {
 }
 
 internal class JsonParseException(msg: String) : SerializationException(msg)
-internal class InvalidRequestException(msg: String) : SerializationException(msg)
-internal class InvalidParamsException(msg: String) : SerializationException(msg)
+
+internal class InvalidRequestException(msg: String, val id: JsonRpcID?) :
+    SerializationException(msg)
+
+internal class InvalidParamsException(msg: String, val id: JsonRpcID) : SerializationException(msg)
 
 private val JSON_TREE_MAPPER = JsonTreeMapper()
 
@@ -52,21 +54,12 @@ fun <T> KSerialLoader<T>.treeMapper(): (JsonElement) -> T = { jsonElement ->
     JSON_TREE_MAPPER.readTree(jsonElement, this)
 }
 
-fun <E> readArray(readElem: (JsonElement) -> E): (JsonElement) -> List<E> = { array ->
-    (array as JsonArray).content.map(readElem)
-}
+val <E> ((JsonElement) -> E).array: (JsonElement) -> List<E>
+    get() = { (it as JsonArray).content.map(this) }
 
-fun <E> readNullableArray(readElem: (JsonElement) -> E): (JsonElement) -> List<E?> =
-    readArray { elem ->
-        when (elem) {
-            JsonNull -> null
-            else -> readElem(elem)
-        }
-    }
-
-val PrimitiveConvert = { elem: JsonElement -> (elem as JsonPrimitive) }
-val StringConvert = { elem: JsonElement -> PrimitiveConvert(elem).str }
-val BooleanConvert = { elem: JsonElement -> PrimitiveConvert(elem).asBoolean }
-val IntConvert = { elem: JsonElement -> PrimitiveConvert(elem).asInt }
-val LongConvert = { elem: JsonElement -> PrimitiveConvert(elem).asLong }
-val DoubleConvert = { elem: JsonElement -> PrimitiveConvert(elem).asDouble }
+val PrimitiveParser = { elem: JsonElement -> (elem as JsonPrimitive) }
+val StringParser = { elem: JsonElement -> PrimitiveParser(elem).str }
+val BooleanParser = { elem: JsonElement -> PrimitiveParser(elem).asBoolean }
+val IntParser: (JsonElement) -> Int = { elem -> PrimitiveParser(elem).asInt }
+val LongParser = { elem: JsonElement -> PrimitiveParser(elem).asLong }
+val DoubleParser = { elem: JsonElement -> PrimitiveParser(elem).asDouble }

@@ -4,6 +4,7 @@ import com.github.kmpp.jsonrpc.jsonast.JSON
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonLiteral
 import com.github.kmpp.jsonrpc.jsonast.JsonNull
+import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import com.github.kmpp.jsonrpc.jsonast.JsonPrimitive
 import com.github.kmpp.jsonrpc.jsonast.JsonString
 import kotlinx.serialization.KInput
@@ -13,12 +14,14 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.internal.SerialClassDescImpl
 
-private fun JsonElement.readJsonRpcID(): JsonRpcID = when (this) {
-    is JsonPrimitive -> readJsonRpcID()
+private fun JsonElement.parseJsonRpcID(): JsonRpcID = when (this) {
+    is JsonPrimitive -> parseJsonRpcID()
     else -> throw SerializationException("Could not parse $this to JsonRpcID")
 }
 
-internal fun JsonPrimitive.readJsonRpcID(): JsonRpcID = when (this) {
+internal fun JsonObject.parseJsonRpcID(): JsonRpcID = this.getAsValue("id").parseJsonRpcID()
+
+private fun JsonPrimitive.parseJsonRpcID(): JsonRpcID = when (this) {
     is JsonString -> JsonRpcID(this.str)
     is JsonLiteral -> {
         if (this == JsonNull) {
@@ -45,7 +48,7 @@ internal object JsonRpcIDSerializer : KSerializer<JsonRpcID> {
     override fun load(input: KInput): JsonRpcID {
         val jsonReader = input as? JSON.JsonInput
                 ?: throw SerializationException("This class can be loaded only by JSON")
-        return jsonReader.readAsTree().readJsonRpcID()
+        return jsonReader.readAsTree().parseJsonRpcID()
     }
 
     override val serialClassDesc: KSerialClassDesc =
