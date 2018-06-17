@@ -1,75 +1,55 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.toErrorObject
+
 const val JSON_RPC = "2.0"
 
 sealed class JsonRpc(
     val jsonrpc: String = JSON_RPC
 )
 
-sealed class RequestJsonRpc<P>(
+sealed class Request<P>(
     open val method: String,
     open val params: P? = null
 ) : JsonRpc()
 
-data class ClientRequestJsonRpc<P>(
+data class ClientRequest<P>(
     override val method: String,
     override val params: P? = null,
     val id: JsonRpcID
-) : RequestJsonRpc<P>(method, params)
+) : Request<P>(method, params)
 
-data class NotificationJsonRpc<P>(
+data class Notification<P>(
     override val method: String,
     override val params: P? = null
-) : RequestJsonRpc<P>(method, params)
+) : Request<P>(method, params)
 
-@Suppress("unused") // IntelliJ incorrectly reads type params as unused
-sealed class ResponseJsonRpc<R, E>(
+@Suppress("unused") // IntelliJ incorrectly sees type params as unused
+sealed class Response<R, E>(
     open val id: JsonRpcID
 ) : JsonRpc()
 
-data class ResultJsonRpc<R>(
+data class Result<R>(
     val result: R,
     override val id: JsonRpcID
-) : ResponseJsonRpc<R, Any>(id) {
+) : Response<R, Nothing>(id) {
     @Suppress("UNCHECKED_CAST")
-    inline fun <reified E> coerceErrorType() = this as ResponseJsonRpc<R, E>
+    inline fun <reified E> coerceErrorType() = this as Response<R, E>
 }
 
-data class ErrorJsonRpc<E>(
-    val error: JsonRpcErrorObject<E>,
+data class Error<E>(
+    val error: ErrorObject<E>,
     override val id: JsonRpcID
-) : ResponseJsonRpc<Any, E>(id) {
+) : Response<Nothing, E>(id) {
     @Suppress("UNCHECKED_CAST")
-    inline fun <reified R> coerceResultType() = this as ResponseJsonRpc<R, E>
+    inline fun <reified R> coerceResultType() = this as Response<R, E>
 }
 
-data class JsonRpcErrorObject<E>(
+data class ErrorObject<E>(
     val code: Int,
     val message: String,
     val data: E? = null
-) {
-    companion object {
-        fun <E> parseError(data: E? = null): JsonRpcErrorObject<E> =
-            JsonRpcErrorObject(code = -32700, message = "Parse error", data = data)
-
-        fun <E> invalidRequest(data: E? = null): JsonRpcErrorObject<E> =
-            JsonRpcErrorObject(code = -32600, message = "Invalid Request", data = data)
-
-        fun <E> methodNotFound(data: E? = null): JsonRpcErrorObject<E> =
-            JsonRpcErrorObject(code = -32601, message = "Method not found", data = data)
-
-        fun <E> invalidParams(data: E? = null): JsonRpcErrorObject<E> =
-            JsonRpcErrorObject(code = -32602, message = "Invalid params", data = data)
-
-        fun <E> internalError(data: E? = null): JsonRpcErrorObject<E> =
-            JsonRpcErrorObject(code = -32603, message = "Internal error", data = data)
-
-        fun <E> serverError(code: Int, data: E? = null): JsonRpcErrorObject<E> {
-            require(code in -32099..-32000) { "code=$code outside JSON-RPC server error range" }
-            return JsonRpcErrorObject(code = code, message = "Server error", data = data)
-        }
-    }
-}
+)
 
 sealed class JsonRpcID {
     companion object {
@@ -84,7 +64,7 @@ object JsonRpcNullID : JsonRpcID() {
     override fun toString() = "JsonRpcNullID(id=null)"
 }
 
-@Suppress("unused")
+@Suppress("unused") // IntelliJ incorrectly sees type param as unused
 sealed class ReadResult<T> {
     companion object {
         fun <T> validRequest(request: T): ReadResult<T> = ReadSuccess(request)
@@ -100,19 +80,26 @@ sealed class ReadError(
     open val details: String?,
     open val id: JsonRpcID
 ) : ReadResult<Any>() {
-    val stringError by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        ErrorJsonRpc(this.toErrorObject(), id)
+    val stringError: Error<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Error(this.toErrorObject(), id)
     }
-    val stringErrorJson by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        saveStringErrorJsonRpc(stringError)
+    val stringErrorJson: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        saveStringError(stringError)
     }
+}
 
-    fun toErrorObject(): JsonRpcErrorObject<String> = when (this) {
-        is ParseError -> JsonRpcErrorObject.parseError(details)
-        is InvalidRequest -> JsonRpcErrorObject.invalidRequest(details)
-        is InvalidParams -> JsonRpcErrorObject.invalidParams(details)
-        is InternalError -> JsonRpcErrorObject.internalError(details)
-    }
+fun <E> methodNotFound(data: E? = null): ErrorObject<E> =
+    ErrorObject(code = -32601, message = "Method not found", data = data)
+
+fun <E> invalidParams(data: E? = null): ErrorObject<E> =
+    ErrorObject(code = -32602, message = "Invalid params", data = data)
+
+fun <E> internalError(data: E? = null): ErrorObject<E> =
+    ErrorObject(code = -32603, message = "Internal error", data = data)
+
+fun <E> serverError(code: Int, data: E? = null): ErrorObject<E> {
+    require(code in -32099..-32000) { "code=$code outside JSON-RPC server error range" }
+    return ErrorObject(code = code, message = "Server error", data = data)
 }
 
 /**

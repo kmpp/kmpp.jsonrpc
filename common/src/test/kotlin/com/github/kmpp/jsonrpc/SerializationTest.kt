@@ -1,14 +1,11 @@
 package com.github.kmpp.jsonrpc
 
-import com.github.kmpp.jsonrpc.internal.JsonRpcErrorObjectLoader
-import com.github.kmpp.jsonrpc.internal.JsonRpcErrorObjectSaver
+import com.github.kmpp.jsonrpc.internal.ErrorObjectLoader
+import com.github.kmpp.jsonrpc.internal.ErrorObjectSaver
 import com.github.kmpp.jsonrpc.internal.JsonRpcIDSerializer
 import com.github.kmpp.jsonrpc.jsonast.JSON
 import com.github.kmpp.jsonrpc.jsonast.JsonNull
 import com.github.kmpp.jsonrpc.jsonast.JsonTreeParser
-import com.github.kmpp.jsonrpc.loadResponseJsonRpc
-import com.github.kmpp.jsonrpc.saveErrorJsonRpc
-import com.github.kmpp.jsonrpc.saveResultJsonRpc
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.KSerializer
@@ -40,23 +37,23 @@ class SerializationTest {
 
     @Test
     fun testClientJsonRpcSerialization() {
-        val saver = getRequestJsonRpcSaver(Data.serializer())
-        val loader = getRequestJsonRpcLoaderWithParamsReader(Data.serializer().tree)
+        val saver = getRequestSaver(Data.serializer())
+        val loader = getRequestLoaderWithParamsReader(Data.serializer().tree)
 
-        roundtrip(saver, loader, ClientRequestJsonRpc("method", Data(), JsonRpcID("id")))
-        roundtrip(saver, loader, ClientRequestJsonRpc("m", Data(nullable = "nullable"), JsonRpcNullID))
+        roundtrip(saver, loader, ClientRequest("method", Data(), JsonRpcID("id")))
+        roundtrip(saver, loader, ClientRequest("m", Data(nullable = "nullable"), JsonRpcNullID))
         assertEquals(
             parse(
                 loader,
                 """{"jsonrpc":"2.0","method":"m","params":{"i":123,"d":123.456,"string":"string"},"id":"id"}"""
             ),
-            ClientRequestJsonRpc("m", Data(), JsonRpcID("id"))
+            ClientRequest("m", Data(), JsonRpcID("id"))
         )
         assertEquals(
             roundtrip(
                 saver, loader, """{"jsonrpc":"2.0","method":"m","id":"id"}"""
             ),
-            ClientRequestJsonRpc<Data>("m", null, JsonRpcID("id"))
+            ClientRequest<Data>("m", null, JsonRpcID("id"))
         )
         assertFailsWith(SerializationException::class) {
             parse(
@@ -65,35 +62,35 @@ class SerializationTest {
             )
         }
 
-        roundtrip(saver, loader, NotificationJsonRpc("m", Data()))
-        roundtrip(saver, loader, NotificationJsonRpc<Data>("m", params = null))
+        roundtrip(saver, loader, Notification("m", Data()))
+        roundtrip(saver, loader, Notification<Data>("m", params = null))
         assertEquals(
             parse(
                 loader,
                 """{"jsonrpc":"2.0","method":"m","params":{"i":123,"d":123.456,"string":"string"}}"""
             ),
-            NotificationJsonRpc("m", Data())
+            Notification("m", Data())
         )
         assertEquals(
             roundtrip(saver, loader, """{"jsonrpc":"2.0","method":"m"}"""),
-            NotificationJsonRpc<Data>("m", params = null)
+            Notification<Data>("m", params = null)
         )
     }
 
     @Test
     fun testJsonRpcErrorObjectSerialization() {
-        val saver = JsonRpcErrorObjectSaver(Data.serializer())
+        val saver = ErrorObjectSaver(Data.serializer())
         val loader =
-            JsonRpcErrorObjectLoader.withDataReader(Data.serializer().tree)
+            ErrorObjectLoader.withDataReader(Data.serializer().tree)
 
-        roundtrip(saver, loader, JsonRpcErrorObject<Data>(42, message = "message", data = null))
-        roundtrip(saver, loader, JsonRpcErrorObject(42, message = "message", data = Data()))
+        roundtrip(saver, loader, ErrorObject<Data>(42, message = "message", data = null))
+        roundtrip(saver, loader, ErrorObject(42, message = "message", data = Data()))
         assertEquals(
             roundtrip(saver, loader, """{"code":42,"message":"message"}"""),
-            JsonRpcErrorObject<Data>(code = 42, message = "message", data = null)
+            ErrorObject<Data>(code = 42, message = "message", data = null)
         )
 
-        val serverErrorObject = JsonRpcErrorObject.serverError(-32099, Data())
+        val serverErrorObject = serverError(-32099, Data())
         roundtrip(saver, loader, serverErrorObject)
     }
 
@@ -105,23 +102,23 @@ class SerializationTest {
 
     @Test
     fun testServerJsonRpcSerialization() {
-        val resultSaver: KSerialSaver<ResultJsonRpc<Result>> =
-            getResultJsonRpcSaver(resultSaver = Result.serializer())
-        val errorSaver: KSerialSaver<ErrorJsonRpc<Data>> =
-            getErrorJsonRpcSaver(errorDataSaver = Data.serializer())
-        val loader = getResponseJsonRpcLoaderWithReaders(
+        val resultSaver: KSerialSaver<com.github.kmpp.jsonrpc.Result<Result>> =
+            getResultSaver(resultSaver = Result.serializer())
+        val errorSaver: KSerialSaver<Error<Data>> =
+            getErrorSaver(errorDataSaver = Data.serializer())
+        val loader = getResponseLoaderWithReaders(
             resultReader = Result.serializer().tree,
             errorDataReader = Data.serializer().tree
         )
 
         roundtrip(
-            resultSaver, loader, ResultJsonRpc(
+            resultSaver, loader, Result(
                 result = Result(123L, listOf("hi", null, "whoa")), id = JsonRpcID("id")
             )
         )
         roundtrip(
-            errorSaver, loader, ErrorJsonRpc(
-                error = JsonRpcErrorObject(42, "error!", Data()), id = JsonRpcNullID
+            errorSaver, loader, Error(
+                error = ErrorObject(42, "error!", Data()), id = JsonRpcNullID
             )
         )
 
@@ -130,7 +127,7 @@ class SerializationTest {
                 loader,
                 """{"jsonrpc":"2.0","result":{"el":10000,"strList":["heynow"]},"id":"id"}"""
             ),
-            ResultJsonRpc(
+            Result(
                 result = Result(10_000L, listOf("heynow")),
                 id = JsonRpcID("id")
             ).coerceErrorType()
@@ -140,8 +137,8 @@ class SerializationTest {
                 loader,
                 """{"jsonrpc":"2.0","error":{"code":42,"message":"eek","data":{"i":42,"d":0.0,"nullable":"present","string":"o"}},"id":"id"}"""
             ),
-            ErrorJsonRpc(
-                error = JsonRpcErrorObject(
+            Error(
+                error = ErrorObject(
                     code = 42,
                     message = "eek",
                     data = Data(42, 0.0, nullable = "present", string = "o")
@@ -154,8 +151,8 @@ class SerializationTest {
                 loader,
                 """{"jsonrpc":"2.0","error":{"code":42,"message":"eek"},"id":"id"}"""
             ),
-            ErrorJsonRpc(
-                error = JsonRpcErrorObject<Data>(code = 42, message = "eek", data = null),
+            Error(
+                error = ErrorObject<Data>(code = 42, message = "eek", data = null),
                 id = JsonRpcID("id")
             ).coerceResultType()
         )
@@ -182,22 +179,22 @@ class SerializationTest {
     }
 
     private fun <R, E> roundtrip(
-        saver: KSerialSaver<ResultJsonRpc<R>>,
-        loader: KSerialLoader<ResponseJsonRpc<R, E>>,
-        obj: ResultJsonRpc<R>
+        saver: KSerialSaver<com.github.kmpp.jsonrpc.Result<R>>,
+        loader: KSerialLoader<Response<R, E>>,
+        obj: com.github.kmpp.jsonrpc.Result<R>
     ) {
-        val str = saveResultJsonRpc(saver, obj)
-        val parsed = loadResponseJsonRpc(loader, str) as ResultJsonRpc<R>
+        val str = saveResult(saver, obj)
+        val parsed = loadResponse(loader, str) as com.github.kmpp.jsonrpc.Result<R>
         assertEquals(obj, parsed)
     }
 
     private fun <R, E> roundtrip(
-        saver: KSerialSaver<ErrorJsonRpc<E>>,
-        loader: KSerialLoader<ResponseJsonRpc<R, E>>,
-        obj: ErrorJsonRpc<E>
+        saver: KSerialSaver<Error<E>>,
+        loader: KSerialLoader<Response<R, E>>,
+        obj: Error<E>
     ) {
-        val str = saveErrorJsonRpc(saver, obj)
-        val parsed = loadResponseJsonRpc(loader, str) as ErrorJsonRpc<E>
+        val str = saveError(saver, obj)
+        val parsed = loadResponse(loader, str) as Error<E>
         assertEquals(obj, parsed)
     }
 

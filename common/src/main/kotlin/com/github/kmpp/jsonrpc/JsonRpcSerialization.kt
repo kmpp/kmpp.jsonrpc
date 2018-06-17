@@ -1,13 +1,13 @@
 package com.github.kmpp.jsonrpc
 
-import com.github.kmpp.jsonrpc.internal.ErrorJsonRpcSaver
+import com.github.kmpp.jsonrpc.internal.ErrorSaver
 import com.github.kmpp.jsonrpc.internal.JSON_TREE_MAPPER
-import com.github.kmpp.jsonrpc.internal.RequestJsonRpcLoader
-import com.github.kmpp.jsonrpc.internal.RequestJsonRpcSaver
-import com.github.kmpp.jsonrpc.internal.ResponseJsonRpcLoader
-import com.github.kmpp.jsonrpc.internal.ResponseJsonRpcSaver
-import com.github.kmpp.jsonrpc.internal.ResultJsonRpcSaver
-import com.github.kmpp.jsonrpc.internal.StringErrorJsonRpcSaver
+import com.github.kmpp.jsonrpc.internal.RequestLoader
+import com.github.kmpp.jsonrpc.internal.RequestSaver
+import com.github.kmpp.jsonrpc.internal.ResponseLoader
+import com.github.kmpp.jsonrpc.internal.ResponseSaver
+import com.github.kmpp.jsonrpc.internal.ResultSaver
+import com.github.kmpp.jsonrpc.internal.StringErrorSaver
 import com.github.kmpp.jsonrpc.internal.convertToError
 import com.github.kmpp.jsonrpc.internal.parseParams
 import com.github.kmpp.jsonrpc.jsonast.JSON
@@ -30,93 +30,71 @@ val IntReader = { elem: JsonElement -> PrimitiveReader(elem).asInt }
 val LongReader = { elem: JsonElement -> PrimitiveReader(elem).asLong }
 val DoubleReader = { elem: JsonElement -> PrimitiveReader(elem).asDouble }
 
-typealias RawRequestJsonRpc = RequestJsonRpc<JsonElement>
-typealias RawClientRequestJsonRpc = ClientRequestJsonRpc<JsonElement>
-typealias RawNotificationJsonRpc = NotificationJsonRpc<JsonElement>
-typealias RawResponseJsonRpc = ResponseJsonRpc<JsonElement, JsonElement>
+fun <P> getRequestSaver(paramsSaver: KSerialSaver<P>): KSerialSaver<Request<P>> =
+    RequestSaver(paramsSaver)
 
-fun <P> getRequestJsonRpcSaver(
-    paramsSaver: KSerialSaver<P>
-): KSerialSaver<RequestJsonRpc<P>> = RequestJsonRpcSaver(paramsSaver)
+fun <P> getRequestLoaderWithParamsReader(reader: (JsonElement) -> P): KSerialLoader<Request<P>> =
+    RequestLoader.withParamsReader(reader)
 
-fun <P> getRequestJsonRpcLoaderWithParamsReader(
-    reader: (JsonElement) -> P
-) : KSerialLoader<RequestJsonRpc<P>> = RequestJsonRpcLoader.withParamsReader(reader)
+fun <P> saveRequest(saver: KSerialSaver<Request<P>>, request: Request<P>): String =
+    JSON.stringify(saver, request)
 
-fun <P> saveRequestJsonRpc(
-    saver: KSerialSaver<RequestJsonRpc<P>>,
-    request: RequestJsonRpc<P>
-): String = JSON.stringify(saver, request)
-
-fun loadRequestJsonRpc(json: String): ReadResult<RawRequestJsonRpc> {
+fun loadRequest(json: String): ReadResult<Request<JsonElement>> {
     return try {
-        val parsed = JSON.parse(RequestJsonRpcLoader, json)
+        val parsed = JSON.parse(RequestLoader, json)
         ReadResult.validRequest(parsed)
     } catch (e: Exception) {
         ReadResult.error(convertToError(e))
     }
 }
 
-fun <P> RawClientRequestJsonRpc.parseRequestParams(
+fun <P> ClientRequest<JsonElement>.parseRequestParams(
     parser: (JsonElement) -> P
-): ReadResult<ClientRequestJsonRpc<P>> = this.parseParams(parser) {
-        ClientRequestJsonRpc(
-            method,
-            params?.let(parser),
-            id
-        )
-    }
+): ReadResult<ClientRequest<P>> = this.parseParams(parser) {
+    ClientRequest(
+        method,
+        params?.let(parser),
+        id
+    )
+}
 
-fun <P> RawNotificationJsonRpc.parseNotificationParams(
+fun <P> Notification<JsonElement>.parseNotificationParams(
     parser: (JsonElement) -> P
-): ReadResult<NotificationJsonRpc<P>> =
-    this.parseParams(parser) {
-        NotificationJsonRpc(
-            method,
-            params?.let(parser)
-        )
-    }
+): ReadResult<Notification<P>> = this.parseParams(parser) {
+    Notification(
+        method,
+        params?.let(parser)
+    )
+}
 
-fun <R> getResultJsonRpcSaver(
-    resultSaver: KSerialSaver<R>
-): KSerialSaver<ResultJsonRpc<R>> = ResultJsonRpcSaver(resultSaver)
+fun <R> getResultSaver(resultSaver: KSerialSaver<R>): KSerialSaver<Result<R>> =
+    ResultSaver(resultSaver)
 
-fun saveStringErrorJsonRpc(error: ErrorJsonRpc<String>) =
-    JSON.stringify(StringErrorJsonRpcSaver, error)
+fun saveStringError(error: Error<String>) = JSON.stringify(StringErrorSaver, error)
 
-fun <E> getErrorJsonRpcSaver(errorDataSaver: KSerialSaver<E>): KSerialSaver<ErrorJsonRpc<E>> =
-        ErrorJsonRpcSaver(errorDataSaver)
+fun <E> getErrorSaver(errorDataSaver: KSerialSaver<E>): KSerialSaver<Error<E>> =
+    ErrorSaver(errorDataSaver)
 
-fun <R, E> getResponseJsonRpcSaver(
-    resultSaver: KSerialSaver<ResultJsonRpc<R>>,
-    errorSaver: KSerialSaver<ErrorJsonRpc<E>>
-): KSerialSaver<ResponseJsonRpc<R, E>> = ResponseJsonRpcSaver(resultSaver, errorSaver)
+fun <R, E> getResponseSaver(
+    resultSaver: KSerialSaver<Result<R>>,
+    errorSaver: KSerialSaver<Error<E>>
+): KSerialSaver<Response<R, E>> = ResponseSaver(resultSaver, errorSaver)
 
-fun getResponseJsonRpcLoader(): KSerialLoader<RawResponseJsonRpc> =
-    ResponseJsonRpcLoader
+fun getResponseLoader(): KSerialLoader<Response<JsonElement, JsonElement>> = ResponseLoader
 
-fun <R, E> getResponseJsonRpcLoaderWithReaders(
+fun <R, E> getResponseLoaderWithReaders(
     resultReader: (JsonElement) -> R,
     errorDataReader: (JsonElement) -> E
-): KSerialLoader<ResponseJsonRpc<R, E>> =
-    ResponseJsonRpcLoader.withReaders(resultReader, errorDataReader)
+): KSerialLoader<Response<R, E>> = ResponseLoader.withReaders(resultReader, errorDataReader)
 
-fun <R, E> saveResponseJsonRpc(
-    saver: KSerialSaver<ResponseJsonRpc<R, E>>,
-    response: ResponseJsonRpc<R, E>
-): String = JSON.stringify(saver, response)
+fun <R, E> saveResponse(saver: KSerialSaver<Response<R, E>>, response: Response<R, E>): String =
+    JSON.stringify(saver, response)
 
-fun <R> saveResultJsonRpc(
-    saver: KSerialSaver<ResultJsonRpc<R>>,
-    result: ResultJsonRpc<R>
-): String = JSON.stringify(saver, result)
+fun <R> saveResult(saver: KSerialSaver<Result<R>>, result: Result<R>): String =
+    JSON.stringify(saver, result)
 
-fun <E> saveErrorJsonRpc(
-    saver: KSerialSaver<ErrorJsonRpc<E>>,
-    error: ErrorJsonRpc<E>
-): String = JSON.stringify(saver, error)
+fun <E> saveError(saver: KSerialSaver<Error<E>>, error: Error<E>): String =
+    JSON.stringify(saver, error)
 
-fun <R, E> loadResponseJsonRpc(
-    loader: KSerialLoader<ResponseJsonRpc<R, E>>,
-    json: String
-): ResponseJsonRpc<R, E> = JSON.parse(loader, json)
+fun <R, E> loadResponse(loader: KSerialLoader<Response<R, E>>, json: String): Response<R, E> =
+    JSON.parse(loader, json)
