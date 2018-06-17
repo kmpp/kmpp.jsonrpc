@@ -21,7 +21,6 @@ def target = "${projectDir}/build/classes/main"
         sourceMap = true
         sourceMapEmbedSources = "always"
         moduleKind = 'umd'
-        freeCompilerArgs += ['-Xprogressive']
     }
 }
 

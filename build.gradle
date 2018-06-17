@@ -35,7 +35,19 @@ subprojects {
     apply plugin: 'com.jfrog.bintray'
 
     tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
-        kotlinOptions.freeCompilerArgs += ['-Xprogressive']
+        kotlinOptions {
+            freeCompilerArgs += ['-Xprogressive']
+            apiVersion = '1.2'
+            languageVersion = '1.2'
+        }
+    }
+
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile).all {
+        kotlinOptions {
+            freeCompilerArgs += ['-Xprogressive']
+            apiVersion = '1.2'
+            languageVersion = '1.2'
+        }
     }
 
     afterEvaluate {
