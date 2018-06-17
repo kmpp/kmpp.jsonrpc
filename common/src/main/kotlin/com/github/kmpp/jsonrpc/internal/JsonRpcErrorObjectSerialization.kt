@@ -1,5 +1,6 @@
-package com.github.kmpp.jsonrpc
+package com.github.kmpp.jsonrpc.internal
 
+import com.github.kmpp.jsonrpc.JsonRpcErrorObject
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonLiteral
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
@@ -14,7 +15,7 @@ import kotlinx.serialization.UpdateNotSupportedException
 import kotlinx.serialization.internal.SerialClassDescImpl
 
 private val serialClassDesc: KSerialClassDesc =
-    SerialClassDescImpl("com.github.kmpp.JsonRpcErrorObject").apply {
+    SerialClassDescImpl("com.github.kmpp.jsonrpc.JsonRpcErrorObject").apply {
         addElement("code")
         addElement("message")
         addElement("data")
@@ -47,8 +48,8 @@ object JsonRpcErrorObjectLoader : KSerialLoader<JsonRpcErrorObject<JsonElement>>
         old: JsonRpcErrorObject<JsonElement>
     ): JsonRpcErrorObject<JsonElement> = throw UpdateNotSupportedException("Update not supported")
 
-    fun <E> withDataParser(parser: (JsonElement) -> E): KSerialLoader<JsonRpcErrorObject<E>> =
-        JsonRpcErrorObjectLoaderWithDataParser(parser)
+    fun <E> withDataReader(reader: (JsonElement) -> E): KSerialLoader<JsonRpcErrorObject<E>> =
+        JsonRpcErrorObjectLoaderWithData(reader)
 }
 
 internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> {
@@ -66,12 +67,16 @@ internal fun JsonObject.toJsonRpcErrorObject(): JsonRpcErrorObject<JsonElement> 
     return JsonRpcErrorObject(code, message, data)
 }
 
-internal class JsonRpcErrorObjectLoaderWithDataParser<E>(
-    private val dataParser: (JsonElement) -> E
+internal class JsonRpcErrorObjectLoaderWithData<E>(
+    private val dataReader: (JsonElement) -> E
 ) : KSerialLoader<JsonRpcErrorObject<E>> {
     override fun load(input: KInput): JsonRpcErrorObject<E> {
-        val untyped = JsonRpcErrorObjectLoader.load(input)
-        return JsonRpcErrorObject(untyped.code, untyped.message, untyped.data?.let(dataParser))
+        val raw = JsonRpcErrorObjectLoader.load(input)
+        return JsonRpcErrorObject(
+            raw.code,
+            raw.message,
+            raw.data?.let(dataReader)
+        )
     }
 
     override fun update(input: KInput, old: JsonRpcErrorObject<E>): JsonRpcErrorObject<E> =

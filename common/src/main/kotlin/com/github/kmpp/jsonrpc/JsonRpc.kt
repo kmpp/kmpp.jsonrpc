@@ -87,23 +87,21 @@ object JsonRpcNullID : JsonRpcID() {
 }
 
 @Suppress("unused")
-sealed class ParsingResult<T> {
+sealed class ReadResult<T> {
     companion object {
-        fun <T : RequestJsonRpc<P>, P> valid(message: T): ParsingResult<T> = ParsingSuccess(message)
+        fun <T> validRequest(request: T): ReadResult<T> = ReadSuccess(request)
 
         @Suppress("UNCHECKED_CAST")
-        fun <P> error(error: ParsingError): ParsingResult<P> = error as ParsingResult<P>
+        fun <T> error(error: ReadError): ReadResult<T> = error as ReadResult<T>
     }
 }
 
-data class ParsingSuccess<T : RequestJsonRpc<P>, P> internal constructor(
-    val message: T
-) : ParsingResult<T>()
+data class ReadSuccess<T> internal constructor(val message: T) : ReadResult<T>()
 
-sealed class ParsingError(
+sealed class ReadError(
     open val details: String?,
     open val id: JsonRpcID
-) : ParsingResult<Any>() {
+) : ReadResult<Any>() {
     val stringError by lazy(LazyThreadSafetyMode.PUBLICATION) {
         ErrorJsonRpc(this.toErrorObject(), id)
     }
@@ -119,21 +117,31 @@ sealed class ParsingError(
     }
 }
 
-data class ParseError(
+/**
+ * An error raised when Request was not valid JSON
+ */
+data class ParseError internal constructor(
     override val details: String?
-) : ParsingError(details, JsonRpcNullID)
+) : ReadError(details, JsonRpcNullID)
 
-data class InvalidRequest(
+/**
+ * An error raised when Request was valid JSON, but was not a valid JSON-RPC Request object
+ */
+data class InvalidRequest internal constructor(
     override val details: String?,
     override val id: JsonRpcID
-) : ParsingError(details, id)
+) : ReadError(details, id)
 
-data class InvalidParams(
+/**
+ * An error raised when Request was a valid JSON-RPC object, but the value present in `"params"`
+ * could not be correctly parsed/read for the given `"method"`
+ */
+data class InvalidParams internal constructor(
     override val details: String?,
     override val id: JsonRpcID
-) : ParsingError(details, id)
+) : ReadError(details, id)
 
-data class InternalError(
+data class InternalError internal constructor(
     override val details: String?
-) : ParsingError(details, JsonRpcNullID)
+) : ReadError(details, JsonRpcNullID)
 

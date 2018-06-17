@@ -1,5 +1,12 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.JsonRpcErrorObjectSaver
+import com.github.kmpp.jsonrpc.internal.JsonRpcIDSerializer
+import com.github.kmpp.jsonrpc.internal.checkJsonrpc
+import com.github.kmpp.jsonrpc.internal.getRequired
+import com.github.kmpp.jsonrpc.internal.readJsonRpcID
+import com.github.kmpp.jsonrpc.internal.to
+import com.github.kmpp.jsonrpc.internal.toJsonRpcErrorObject
 import com.github.kmpp.jsonrpc.jsonast.JSON
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
@@ -28,7 +35,8 @@ class ResultJsonRpcSaver<R>(
         val output = output.writeBegin(serialClassDesc)
         output.writeStringElementValue(serialClassDesc, 0, obj.jsonrpc)
         output.writeSerializableElementValue(serialClassDesc, 1, resultSaver, obj.result)
-        output.writeSerializableElementValue(serialClassDesc, 3, JsonRpcIDSerializer, obj.id)
+        output.writeSerializableElementValue(serialClassDesc, 3,
+            JsonRpcIDSerializer, obj.id)
         output.writeEnd(serialClassDesc)
     }
 }
@@ -37,14 +45,16 @@ object StringErrorJsonRpcSerialSaver :
     KSerialSaver<ErrorJsonRpc<String>> by ErrorJsonRpcSerialSaver(StringSerializer)
 
 class ErrorJsonRpcSerialSaver<E>(errorDataSaver: KSerialSaver<E>) : KSerialSaver<ErrorJsonRpc<E>> {
-    private val errorObjectSaver = JsonRpcErrorObjectSaver(errorDataSaver)
+    private val errorObjectSaver =
+        JsonRpcErrorObjectSaver(errorDataSaver)
 
     override fun save(output: KOutput, obj: ErrorJsonRpc<E>) {
         @Suppress("NAME_SHADOWING")
         val output = output.writeBegin(serialClassDesc)
         output.writeStringElementValue(serialClassDesc, 0, obj.jsonrpc)
         output.writeSerializableElementValue(serialClassDesc, 2, errorObjectSaver, obj.error)
-        output.writeSerializableElementValue(serialClassDesc, 3, JsonRpcIDSerializer, obj.id)
+        output.writeSerializableElementValue(serialClassDesc, 3,
+            JsonRpcIDSerializer, obj.id)
         output.writeEnd(serialClassDesc)
     }
 }
@@ -67,7 +77,7 @@ object ResponseJsonRpcLoader : KSerialLoader<ResponseJsonRpc<JsonElement, JsonEl
 
         tree.checkJsonrpc()
 
-        val id = tree.parseJsonRpcID()
+        val id = tree.readJsonRpcID()
 
         return when {
             "result" in tree -> ResultJsonRpc(tree["result"]!!, id).coerceErrorType()
