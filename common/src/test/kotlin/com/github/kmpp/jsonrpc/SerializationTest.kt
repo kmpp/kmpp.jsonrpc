@@ -3,11 +3,12 @@ package com.github.kmpp.jsonrpc
 import com.github.kmpp.jsonrpc.internal.JsonRpcErrorObjectLoader
 import com.github.kmpp.jsonrpc.internal.JsonRpcErrorObjectSaver
 import com.github.kmpp.jsonrpc.internal.JsonRpcIDSerializer
-import com.github.kmpp.jsonrpc.internal.RequestJsonRpcLoader
-import com.github.kmpp.jsonrpc.internal.RequestJsonRpcSaver
 import com.github.kmpp.jsonrpc.jsonast.JSON
 import com.github.kmpp.jsonrpc.jsonast.JsonNull
 import com.github.kmpp.jsonrpc.jsonast.JsonTreeParser
+import com.github.kmpp.jsonrpc.loadResponseJsonRpc
+import com.github.kmpp.jsonrpc.saveErrorJsonRpc
+import com.github.kmpp.jsonrpc.saveResultJsonRpc
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.KSerializer
@@ -39,8 +40,8 @@ class SerializationTest {
 
     @Test
     fun testClientJsonRpcSerialization() {
-        val saver = RequestJsonRpcSaver(Data.serializer())
-        val loader = RequestJsonRpcLoader.withParamsReader(Data.serializer().tree)
+        val saver = getRequestJsonRpcSaver(Data.serializer())
+        val loader = getRequestJsonRpcLoaderWithParamsReader(Data.serializer().tree)
 
         roundtrip(saver, loader, ClientRequestJsonRpc("method", Data(), JsonRpcID("id")))
         roundtrip(saver, loader, ClientRequestJsonRpc("m", Data(nullable = "nullable"), JsonRpcNullID))
@@ -105,12 +106,12 @@ class SerializationTest {
     @Test
     fun testServerJsonRpcSerialization() {
         val resultSaver: KSerialSaver<ResultJsonRpc<Result>> =
-            ResultJsonRpcSaver(resultSaver = Result.serializer())
+            getResultJsonRpcSaver(resultSaver = Result.serializer())
         val errorSaver: KSerialSaver<ErrorJsonRpc<Data>> =
-            ErrorJsonRpcSerialSaver(errorDataSaver = Data.serializer())
-        val loader = ResponseJsonRpcLoader.withParsers(
-            resultParser = Result.serializer().tree,
-            errorDataParser = Data.serializer().tree
+            getErrorJsonRpcSaver(errorDataSaver = Data.serializer())
+        val loader = getResponseJsonRpcLoaderWithReaders(
+            resultReader = Result.serializer().tree,
+            errorDataReader = Data.serializer().tree
         )
 
         roundtrip(

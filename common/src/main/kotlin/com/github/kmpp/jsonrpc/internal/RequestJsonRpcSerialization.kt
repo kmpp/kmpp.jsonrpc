@@ -139,8 +139,8 @@ private class RequestJsonRpcLoaderWithParamsParser<P>(
 ) : KSerialLoader<RequestJsonRpc<P>> {
 
     override fun load(input: KInput): RequestJsonRpc<P> {
-        val untyped = RequestJsonRpcLoader.load(input)
-        return untyped.tryParseParams(paramsParser) { parsedParams: P? ->
+        val raw = RequestJsonRpcLoader.load(input)
+        return raw.tryParseParams(paramsParser) { parsedParams: P? ->
             when (this) {
                 is ClientRequestJsonRpc -> ClientRequestJsonRpc(
                     method,

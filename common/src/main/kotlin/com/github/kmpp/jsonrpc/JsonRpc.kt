@@ -1,7 +1,5 @@
 package com.github.kmpp.jsonrpc
 
-import com.github.kmpp.jsonrpc.jsonast.JSON
-
 const val JSON_RPC = "2.0"
 
 sealed class JsonRpc(
@@ -106,7 +104,7 @@ sealed class ReadError(
         ErrorJsonRpc(this.toErrorObject(), id)
     }
     val stringErrorJson by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        JSON.stringify(StringErrorJsonRpcSerialSaver, stringError)
+        saveStringErrorJsonRpc(stringError)
     }
 
     fun toErrorObject(): JsonRpcErrorObject<String> = when (this) {

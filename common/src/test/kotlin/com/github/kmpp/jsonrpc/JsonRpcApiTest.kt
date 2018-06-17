@@ -3,6 +3,9 @@ package com.github.kmpp.jsonrpc
 import com.github.kmpp.jsonrpc.jsonast.JsonArray
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
+import com.github.kmpp.jsonrpc.loadResponseJsonRpc
+import com.github.kmpp.jsonrpc.saveErrorJsonRpc
+import com.github.kmpp.jsonrpc.saveResultJsonRpc
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.Serializable
@@ -16,10 +19,11 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class JsonRpcApiTest {
-    private val intResultSaver = ResultJsonRpcSaver(IntSerializer)
-    private val stringErrorSaver = ErrorJsonRpcSerialSaver(StringSerializer)
+    private val intResultSaver = getResultJsonRpcSaver(IntSerializer)
+    private val stringErrorSaver =
+        getErrorJsonRpcSaver(StringSerializer)
     private val responseSaver: KSerialSaver<ResponseJsonRpc<Int, String>> =
-        ResponseJsonRpcSaver(intResultSaver, stringErrorSaver)
+        getResponseJsonRpcSaver(intResultSaver, stringErrorSaver)
 
     @Serializable
     data class IntInput(val input: Int = 0)
@@ -135,7 +139,10 @@ class JsonRpcApiTest {
                             request.id
                         )
                     checkExpected(expected, error.coerceResultType<Int>())
-                    return saveResponseJsonRpc(responseSaver, error.coerceResultType())
+                    return saveResponseJsonRpc(
+                        responseSaver,
+                        error.coerceResultType()
+                    )
                 }
 
                 val subtractResult: ResponseJsonRpc<Int, String> = when (request.params) {
@@ -177,7 +184,10 @@ class JsonRpcApiTest {
                 println("<-- ERROR  : $errorObject")
                 val error = ErrorJsonRpc(errorObject, request.id)
                 checkExpected(expected, error)
-                saveResponseJsonRpc(responseSaver, error.coerceResultType())
+                saveResponseJsonRpc(
+                    responseSaver,
+                    error.coerceResultType()
+                )
             }
         }
     }
@@ -297,14 +307,15 @@ class JsonRpcApiTest {
         val resultObject = Result(params[0] + params[1])
         val result: ResultJsonRpc<Result> =
             ResultJsonRpc(result = resultObject, id = typed.message.id)
-        val resultSaver = ResultJsonRpcSaver(Result.serializer())
+        val resultSaver = getResultJsonRpcSaver(Result.serializer())
         val resultJson = saveResultJsonRpc(resultSaver, result)
         val resultLoader =
-            ResponseJsonRpcLoader.withParsers(
+            getResponseJsonRpcLoaderWithReaders(
                 Result.serializer().tree,
                 StringReader
             )
-        val loadedResult = loadResponseJsonRpc(resultLoader, resultJson)
+        val loadedResult =
+            loadResponseJsonRpc(resultLoader, resultJson)
         assertEquals(
             loadedResult,
             ResultJsonRpc(result = Result(9), id = JsonRpcID("UUID-123")).coerceErrorType()
@@ -329,14 +340,15 @@ class JsonRpcApiTest {
         val typed = untypedResult.parseRequestParams(Params.serializer().tree)
         typed as ReadError
         val error = ErrorJsonRpc(typed.toErrorObject(), untypedResult.id)
-        val errorSaver = ErrorJsonRpcSerialSaver(StringSerializer)
+        val errorSaver = getErrorJsonRpcSaver(StringSerializer)
         val resultJson = saveErrorJsonRpc(errorSaver, error)
         val resultLoader =
-            ResponseJsonRpcLoader.withParsers(
+            getResponseJsonRpcLoaderWithReaders(
                 Result.serializer().tree,
                 StringReader
             )
-        val loadedResult = loadResponseJsonRpc(resultLoader, resultJson)
+        val loadedResult =
+            loadResponseJsonRpc(resultLoader, resultJson)
         assertEquals(
             loadedResult,
             ErrorJsonRpc(
