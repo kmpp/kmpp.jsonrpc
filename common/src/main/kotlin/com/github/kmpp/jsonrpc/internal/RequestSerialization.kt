@@ -8,7 +8,7 @@ import com.github.kmpp.jsonrpc.JsonRpcNullID
 import com.github.kmpp.jsonrpc.Notification
 import com.github.kmpp.jsonrpc.ParseError
 import com.github.kmpp.jsonrpc.ReadError
-import com.github.kmpp.jsonrpc.ReadResult
+import com.github.kmpp.jsonrpc.ReadOutcome
 import com.github.kmpp.jsonrpc.Request
 import com.github.kmpp.jsonrpc.jsonast.JsonArray
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
@@ -109,11 +109,11 @@ internal object RequestLoader : KSerialLoader<Request<JsonElement>> {
 internal fun <I : Request<JsonElement>, O : Request<P>, P> I.parseParams(
     parser: (JsonElement) -> P,
     toType: I.(P?) -> O
-): ReadResult<O> {
+): ReadOutcome<O> {
     return try {
-        ReadResult.validRequest(tryParseParams(parser, toType))
+        ReadOutcome.validRequest(tryParseParams(parser, toType))
     } catch (e: InvalidParamsException) {
-        ReadResult.error(InvalidParams(e.message, e.id))
+        ReadOutcome.error(InvalidParams(e.message, e.id))
     }
 }
 

@@ -39,18 +39,18 @@ fun <P> getRequestLoaderWithParamsReader(reader: (JsonElement) -> P): KSerialLoa
 fun <P> saveRequest(saver: KSerialSaver<Request<P>>, request: Request<P>): String =
     JSON.stringify(saver, request)
 
-fun loadRequest(json: String): ReadResult<Request<JsonElement>> {
+fun loadRequest(json: String): ReadOutcome<Request<JsonElement>> {
     return try {
         val parsed = JSON.parse(RequestLoader, json)
-        ReadResult.validRequest(parsed)
+        ReadOutcome.validRequest(parsed)
     } catch (e: Exception) {
-        ReadResult.error(convertToError(e))
+        ReadOutcome.error(convertToError(e))
     }
 }
 
 fun <P> ClientRequest<JsonElement>.parseRequestParams(
     parser: (JsonElement) -> P
-): ReadResult<ClientRequest<P>> = this.parseParams(parser) {
+): ReadOutcome<ClientRequest<P>> = this.parseParams(parser) {
     ClientRequest(
         method,
         params?.let(parser),
@@ -60,7 +60,7 @@ fun <P> ClientRequest<JsonElement>.parseRequestParams(
 
 fun <P> Notification<JsonElement>.parseNotificationParams(
     parser: (JsonElement) -> P
-): ReadResult<Notification<P>> = this.parseParams(parser) {
+): ReadOutcome<Notification<P>> = this.parseParams(parser) {
     Notification(
         method,
         params?.let(parser)

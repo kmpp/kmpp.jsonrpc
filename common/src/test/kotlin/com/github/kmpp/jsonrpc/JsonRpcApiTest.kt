@@ -89,7 +89,7 @@ class JsonRpcApiTest {
     ) {
         println("--> CLIENT : $json")
 
-        val parsed: ReadResult<Request<JsonElement>> =
+        val parsed: ReadOutcome<Request<JsonElement>> =
             loadRequest(json)
 
         val response: String? = when (parsed) {
@@ -195,16 +195,16 @@ class JsonRpcApiTest {
         parser: (JsonElement) -> P,
         runCalc: (P?) -> R
     ): Response<R, String> {
-        val paramsParseResult: ReadResult<ClientRequest<P>> =
+        val paramsParseOutcome: ReadOutcome<ClientRequest<P>> =
             request.parseRequestParams(parser)
-        return when (paramsParseResult) {
+        return when (paramsParseOutcome) {
             is ReadError -> {
                 // TODO: Investigate why can't use coerceResultType() here, it does the same thing
                 @Suppress("UNCHECKED_CAST")
-                paramsParseResult.stringError as Response<R, String>
+                paramsParseOutcome.stringError as Response<R, String>
             }
             is ReadSuccess<ClientRequest<P>> -> {
-                val outcome = runCalc(paramsParseResult.message.params)
+                val outcome = runCalc(paramsParseOutcome.message.params)
                 println("<** RESULT : $outcome")
                 Result(outcome, request.id).coerceErrorType()
             }

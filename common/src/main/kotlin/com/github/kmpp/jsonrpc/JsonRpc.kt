@@ -1,6 +1,29 @@
 package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.internal.toErrorObject
+import com.github.kmpp.jsonrpc.jsonast.JsonElement
+
+interface JsonRpcServer {
+    fun handleClientRequest(request: ClientRequest<JsonElement>): Response<JsonElement, JsonElement>
+    fun handleNotification(notification: Notification<JsonElement>)
+    fun raisedError(error: Error<JsonElement>)
+}
+
+interface JsonRpcServerSerializer {
+    fun parse(requestJson: String): ReadOutcome<Request<JsonElement>>
+    fun stringifyResult(result: Result<*>): String
+    fun stringifyError(error: Error<*>): String
+}
+
+interface JsonRpcClient {
+    fun handleResponse(response: Response<*, *>)
+}
+
+interface JsonRpcClientSerializer {
+    fun parse(responseJson: String): ReadOutcome<Response<JsonElement, JsonElement>>
+    fun stringifyClientRequest(request: ClientRequest<*>): String
+    fun stringifyNotification(notification: Notification<*>): String
+}
 
 const val JSON_RPC = "2.0"
 
@@ -65,21 +88,21 @@ object JsonRpcNullID : JsonRpcID() {
 }
 
 @Suppress("unused") // IntelliJ incorrectly sees type param as unused
-sealed class ReadResult<T> {
+sealed class ReadOutcome<T> {
     companion object {
-        fun <T> validRequest(request: T): ReadResult<T> = ReadSuccess(request)
+        fun <T> validRequest(request: T): ReadOutcome<T> = ReadSuccess(request)
 
         @Suppress("UNCHECKED_CAST")
-        fun <T> error(error: ReadError): ReadResult<T> = error as ReadResult<T>
+        fun <T> error(error: ReadError): ReadOutcome<T> = error as ReadOutcome<T>
     }
 }
 
-data class ReadSuccess<T> internal constructor(val message: T) : ReadResult<T>()
+data class ReadSuccess<T> internal constructor(val message: T) : ReadOutcome<T>()
 
 sealed class ReadError(
     open val details: String?,
     open val id: JsonRpcID
-) : ReadResult<Any>() {
+) : ReadOutcome<Any>() {
     val stringError: Error<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         Error(this.toErrorObject(), id)
     }
