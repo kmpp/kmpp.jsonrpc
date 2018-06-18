@@ -3,27 +3,6 @@ package com.github.kmpp.jsonrpc
 import com.github.kmpp.jsonrpc.internal.toErrorObject
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 
-interface JsonRpcServer {
-    fun handleClientRequest(request: ClientRequest<JsonElement>): Response<JsonElement, JsonElement>
-    fun handleNotification(notification: Notification<JsonElement>)
-    fun raisedError(error: Error<JsonElement>)
-}
-
-interface JsonRpcServerSerializer {
-    fun parse(requestJson: String): ReadOutcome<Request<JsonElement>>
-    fun stringifyResult(result: Result<*>): String
-    fun stringifyError(error: Error<*>): String
-}
-
-interface JsonRpcClient {
-    fun handleResponse(response: Response<*, *>)
-}
-
-interface JsonRpcClientSerializer {
-    fun parse(responseJson: String): ReadOutcome<Response<JsonElement, JsonElement>>
-    fun stringifyClientRequest(request: ClientRequest<*>): String
-    fun stringifyNotification(notification: Notification<*>): String
-}
 
 const val JSON_RPC = "2.0"
 
@@ -74,6 +53,8 @@ data class ErrorObject<E>(
     val data: E? = null
 )
 
+fun <E> ErrorObject<E>.toError(id: JsonRpcID): Error<E> = Error(this, id)
+
 sealed class JsonRpcID {
     companion object {
         operator fun invoke(id: String) = JsonRpcStringID(id)
@@ -97,17 +78,17 @@ sealed class ReadOutcome<T> {
     }
 }
 
-data class ReadSuccess<T> internal constructor(val message: T) : ReadOutcome<T>()
+data class ReadSuccess<T> internal constructor(val parsed: T) : ReadOutcome<T>()
 
 sealed class ReadError(
     open val details: String?,
     open val id: JsonRpcID
 ) : ReadOutcome<Any>() {
-    val stringError: Error<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+    val errorJson: Error<JsonElement> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         Error(this.toErrorObject(), id)
     }
-    val stringErrorJson: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        saveStringError(stringError)
+    val errorJsonString: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        saveErrorJson(errorJson)
     }
 }
 
@@ -132,13 +113,18 @@ data class ParseError internal constructor(
     override val details: String?
 ) : ReadError(details, JsonRpcNullID)
 
+sealed class RequestError(
+    override val details: String?,
+    override val id: JsonRpcID
+) : ReadError(details, id)
+
 /**
  * An error raised when Request was valid JSON, but was not a valid JSON-RPC Request object
  */
 data class InvalidRequest internal constructor(
     override val details: String?,
     override val id: JsonRpcID
-) : ReadError(details, id)
+) : RequestError(details, id)
 
 /**
  * An error raised when Request was a valid JSON-RPC object, but the value present in `"params"`
@@ -147,9 +133,9 @@ data class InvalidRequest internal constructor(
 data class InvalidParams internal constructor(
     override val details: String?,
     override val id: JsonRpcID
-) : ReadError(details, id)
+) : RequestError(details, id)
 
 data class InternalError internal constructor(
     override val details: String?
-) : ReadError(details, JsonRpcNullID)
+) : RequestError(details, JsonRpcNullID)
 

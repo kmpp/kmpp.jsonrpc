@@ -94,9 +94,9 @@ private fun <E> parseError(data: E? = null): ErrorObject<E> =
 private fun <E> invalidRequest(data: E? = null): ErrorObject<E> =
     ErrorObject(code = -32600, message = "Invalid Request", data = data)
 
-internal fun ReadError.toErrorObject(): ErrorObject<String> = when (this) {
-    is ParseError -> parseError(details)
-    is InvalidRequest -> invalidRequest(details)
-    is InvalidParams -> invalidParams(details)
-    is InternalError -> internalError(details)
+internal fun ReadError.toErrorObject(): ErrorObject<JsonElement> = when (this) {
+    is ParseError -> parseError(jsonStringFromNullable(details))
+    is InvalidRequest -> invalidRequest(jsonStringFromNullable(details))
+    is InvalidParams -> invalidParams(jsonStringFromNullable(details))
+    is InternalError -> internalError(jsonStringFromNullable(details))
 }

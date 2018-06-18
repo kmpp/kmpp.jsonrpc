@@ -1,5 +1,7 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.ErrorJsonSaver
+import com.github.kmpp.jsonrpc.internal.json
 import com.github.kmpp.jsonrpc.internal.toErrorObject
 import com.github.kmpp.jsonrpc.jsonast.JsonArray
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
@@ -18,10 +20,8 @@ import kotlin.test.fail
 
 class JsonRpcApiTest {
     private val intResultSaver = getResultSaver(IntSerializer)
-    private val stringErrorSaver =
-        getErrorSaver(StringSerializer)
-    private val responseSaver: KSerialSaver<Response<Int, String>> =
-        getResponseSaver(intResultSaver, stringErrorSaver)
+    private val responseSaver: KSerialSaver<Response<Int, JsonElement>> =
+        getResponseSaver(intResultSaver, ErrorJsonSaver)
 
     @Serializable
     data class IntInput(val input: Int = 0)
@@ -84,24 +84,23 @@ class JsonRpcApiTest {
 
     private fun <R> request(
         json: String,
-        expResponse: Response<R, String>? = null,
+        expResponse: Response<R, JsonElement>? = null,
         expResponseJson: String? = null
     ) {
         println("--> CLIENT : $json")
 
-        val parsed: ReadOutcome<Request<JsonElement>> =
-            loadRequest(json)
+        val readOutcome: ReadOutcome<Request<JsonElement>> = loadRequest(json)
 
-        val response: String? = when (parsed) {
+        val response: String? = when (readOutcome) {
             is ReadError -> {
-                expResponse?.let { assertEquals(it as Error<String>, parsed.stringError) }
+                expResponse?.let { assertEquals(it as Error<JsonElement>, readOutcome.errorJson) }
                 // Request was invalid JSON, run any needed error handling logic
                 // Can construct and stringify a custom error object, or just use the
                 // provided String-based default:
-                parsed.stringErrorJson
+                readOutcome.errorJsonString
             }
             is ReadSuccess<Request<JsonElement>> -> {
-                val message: Request<JsonElement> = parsed.message
+                val message: Request<JsonElement> = readOutcome.parsed
                 when (message) {
                     is ClientRequest<JsonElement> -> handleRequest(message, expResponse)
                     is Notification<JsonElement> -> {
@@ -118,7 +117,7 @@ class JsonRpcApiTest {
 
     private fun <R> handleRequest(
         request: ClientRequest<JsonElement>,
-        expected: Response<R, String>? = null
+        expected: Response<R, JsonElement>? = null
     ): String {
         println("**> REQUEST: ${request.method} ${request.params}")
         return when (request.method) {
@@ -133,17 +132,14 @@ class JsonRpcApiTest {
                 if (request.params == null) {
                     val error =
                         Error(
-                            invalidParams(request.params.toString()),
+                            invalidParams(request.params.toString().json()),
                             request.id
                         )
                     checkExpected(expected, error.coerceResultType<Int>())
-                    return saveResponse(
-                        responseSaver,
-                        error.coerceResultType()
-                    )
+                    return saveResponse(responseSaver, error.coerceResultType())
                 }
 
-                val subtractResult: Response<Int, String> = when (request.params) {
+                val subtractResult: Response<Int, JsonElement> = when (request.params) {
                     is JsonArray -> {
                         getResult(request, IntReader.array) { intList ->
                             intList!!
@@ -161,7 +157,7 @@ class JsonRpcApiTest {
                     }
                     else -> {
                         Error(
-                            invalidParams(request.params.toString()),
+                            invalidParams(request.params.toString().json()),
                             request.id
                         ).coerceResultType()
                     }
@@ -178,7 +174,7 @@ class JsonRpcApiTest {
                 saveResponse(responseSaver, squareResult)
             }
             else -> {
-                val errorObject = methodNotFound(request.method)
+                val errorObject = methodNotFound(request.method.json())
                 println("<** ERROR  : $errorObject")
                 val error = Error(errorObject, request.id)
                 checkExpected(expected, error)
@@ -194,17 +190,16 @@ class JsonRpcApiTest {
         request: ClientRequest<JsonElement>,
         parser: (JsonElement) -> P,
         runCalc: (P?) -> R
-    ): Response<R, String> {
-        val paramsParseOutcome: ReadOutcome<ClientRequest<P>> =
-            request.parseRequestParams(parser)
+    ): Response<R, JsonElement> {
+        val paramsParseOutcome: ReadOutcome<Request<P>> = request.parseParams(parser)
         return when (paramsParseOutcome) {
             is ReadError -> {
                 // TODO: Investigate why can't use coerceResultType() here, it does the same thing
                 @Suppress("UNCHECKED_CAST")
-                paramsParseOutcome.stringError as Response<R, String>
+                paramsParseOutcome.errorJson as Response<R, JsonElement>
             }
-            is ReadSuccess<ClientRequest<P>> -> {
-                val outcome = runCalc(paramsParseOutcome.message.params)
+            is ReadSuccess<Request<P>> -> {
+                val outcome = runCalc(paramsParseOutcome.parsed.params)
                 println("<** RESULT : $outcome")
                 Result(outcome, request.id).coerceErrorType()
             }
@@ -219,11 +214,11 @@ class JsonRpcApiTest {
                 "${notification.method}: ${notification.params?.toString() ?: "<null>"}"
             }
             "beep" -> {
-                val withBeep = notification.parseNotificationParams(Beep.serializer().tree)
+                val withBeep = notification.parseParams(Beep.serializer().tree)
                 when (withBeep) {
                     is ReadError -> "Error parsing notification params: ${notification.params}"
-                    is ReadSuccess<Notification<Beep>> -> {
-                        withBeep.message.params?.s ?: Beep().s
+                    is ReadSuccess<Request<Beep>> -> {
+                        withBeep.parsed.params?.s ?: Beep().s
                     }
                 }
             }
@@ -234,12 +229,12 @@ class JsonRpcApiTest {
     }
 
     private fun <R1, R2> checkExpected(
-        expected: Response<R1, String>?,
-        result: Response<R2, String>
+        expected: Response<R1, out JsonElement>?,
+        result: Response<R2, out JsonElement>
     ) {
         expected?.let {
             @Suppress("UNCHECKED_CAST")
-            val typeExpected = it as? Response<R2, String>?
+            val typeExpected = it as? Response<R2, out JsonElement>?
             assertEquals(typeExpected, result)
         }
     }
@@ -295,16 +290,17 @@ class JsonRpcApiTest {
         rawRequest as ReadSuccess<Request<JsonElement>>
         @Suppress("UNCHECKED_CAST")
         rawRequest as ReadSuccess<ClientRequest<JsonElement>>
-        val typed = rawRequest.message.parseRequestParams(IntReader.array)
+        val typed = rawRequest.parsed.parseParams(IntReader.array)
+        @Suppress("UNCHECKED_CAST")
         typed as ReadSuccess<ClientRequest<List<Int>>>
         assertEquals(
-            typed.message,
+            typed.parsed,
             ClientRequest("sum", listOf(4, 5), JsonRpcID("UUID-123"))
         )
-        val params: List<Int> = typed.message.params!!
+        val params: List<Int> = typed.parsed.params!!
         val resultObject = Result(params[0] + params[1])
         val result: com.github.kmpp.jsonrpc.Result<Result> =
-            Result(result = resultObject, id = typed.message.id)
+            Result(result = resultObject, id = typed.parsed.id)
         val resultSaver = getResultSaver(Result.serializer())
         val resultJson = saveResult(resultSaver, result)
         val resultLoader =
@@ -333,13 +329,12 @@ class JsonRpcApiTest {
         val requestJson = saveRequest(requestSaver, request)
         val rawRequestReadResult = loadRequest(requestJson)
         rawRequestReadResult as ReadSuccess<Request<JsonElement>>
-        val rawRequest = rawRequestReadResult.message as ClientRequest<JsonElement>
+        val rawRequest = rawRequestReadResult.parsed as ClientRequest<JsonElement>
         assertEquals(rawRequest.method, "sum")
-        val typedRequestReadResult = rawRequest.parseRequestParams(Params.serializer().tree)
+        val typedRequestReadResult = rawRequest.parseParams(Params.serializer().tree)
         typedRequestReadResult as ReadError
         val error = Error(typedRequestReadResult.toErrorObject(), rawRequest.id)
-        val errorSaver = getErrorSaver(StringSerializer)
-        val resultJson = saveError(errorSaver, error)
+        val resultJson = saveError(ErrorJsonSaver, error)
         val resultLoader =
             getResponseLoaderWithReaders(
                 Result.serializer().tree,
@@ -359,11 +354,11 @@ class JsonRpcApiTest {
     private inline fun <reified T : JsonElement> expectValidRequest(
         method: String, id: JsonRpcID, json: String
     ) {
-        val parsed = loadRequest(json)
+        val readOutcome = loadRequest(json)
         val result: Request<JsonElement>
-        when (parsed) {
+        when (readOutcome) {
             is ReadError -> fail("Should have had valid result.")
-            is ReadSuccess<Request<JsonElement>> -> result = parsed.message
+            is ReadSuccess<Request<JsonElement>> -> result = readOutcome.parsed
         }
 
         result as ClientRequest<JsonElement>
@@ -374,11 +369,11 @@ class JsonRpcApiTest {
     private inline fun <reified T : JsonElement> expectValidNotification(
         method: String, json: String
     ) {
-        val parsed = loadRequest(json)
+        val readOutcome = loadRequest(json)
         val result: Request<JsonElement>
-        when (parsed) {
+        when (readOutcome) {
             is ReadError -> fail("Should have had valid result.")
-            is ReadSuccess<Request<JsonElement>> -> result = parsed.message
+            is ReadSuccess<Request<JsonElement>> -> result = readOutcome.parsed
         }
 
         result as Notification<JsonElement>
@@ -395,9 +390,9 @@ class JsonRpcApiTest {
     }
 
     private fun expectInvalidParamsError(loader: KSerialLoader<*>, json: String) {
-        val parsed = loadRequest(json) as ReadSuccess<Request<JsonElement>>
-        val parsedMessage = parsed.message as ClientRequest<JsonElement>
-        val typed = parsedMessage.parseRequestParams(loader.tree)
+        val readOutcome = loadRequest(json) as ReadSuccess<Request<JsonElement>>
+        val parsedMessage = readOutcome.parsed as ClientRequest<JsonElement>
+        val typed = parsedMessage.parseParams(loader.tree)
         when (typed) {
             !is ReadError -> fail("Should have had error result")
             else -> assertTrue {

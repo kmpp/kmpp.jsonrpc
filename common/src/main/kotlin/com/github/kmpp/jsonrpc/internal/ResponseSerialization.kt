@@ -40,6 +40,10 @@ internal class ResultSaver<R>(
     }
 }
 
+internal object JsonResultSaver : KSerialSaver<Result<JsonElement>> by ResultSaver(JsonSaver)
+
+internal object ErrorJsonSaver : KSerialSaver<Error<JsonElement>> by ErrorSaver(JsonSaver)
+
 internal object StringErrorSaver :
     KSerialSaver<Error<String>> by ErrorSaver(
         StringSerializer

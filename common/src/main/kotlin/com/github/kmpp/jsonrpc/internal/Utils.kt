@@ -4,10 +4,13 @@ import com.github.kmpp.jsonrpc.JSON_RPC
 import com.github.kmpp.jsonrpc.JsonRpcID
 import com.github.kmpp.jsonrpc.jsonast.JSON
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
+import com.github.kmpp.jsonrpc.jsonast.JsonNull
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import com.github.kmpp.jsonrpc.jsonast.JsonString
 import com.github.kmpp.jsonrpc.jsonast.JsonTreeMapper
 import kotlinx.serialization.KInput
+import kotlinx.serialization.KOutput
+import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.SerializationException
 
 internal inline fun <reified E : JsonElement> JsonObject.getRequired(
@@ -42,6 +45,18 @@ internal inline fun <reified E : JsonElement> KInput.to(): E {
             ?: throw SerializationException("Expected ${E::class} but had ${jsonReader.readAsTree()}")
 }
 
+internal fun String.json(): JsonElement = JsonString(this)
+
+internal object JsonSaver : KSerialSaver<JsonElement> {
+    override fun save(output: KOutput, obj: JsonElement) {
+         val jsonWriter = output as? JSON.JsonOutput
+                ?: throw SerializationException("This class can be saved only by JSON")
+        jsonWriter.writeTree(obj)
+    }
+}
+
+internal fun jsonStringFromNullable(content: String?): JsonString? = content?.let { JsonString(it) }
+
 internal class JsonParseException(msg: String) : SerializationException(msg)
 
 internal class InvalidRequestException(msg: String, val id: JsonRpcID?) :
@@ -49,5 +64,8 @@ internal class InvalidRequestException(msg: String, val id: JsonRpcID?) :
 
 // non-null id: if we receive invalid params on a Notification we don't send an error response
 internal class InvalidParamsException(msg: String, val id: JsonRpcID) : SerializationException(msg)
+
+internal fun <T> T?.toStringJson(): JsonElement =
+    this?.let { JsonString(it.toString()) } ?: JsonNull
 
 internal val JSON_TREE_MAPPER = JsonTreeMapper()

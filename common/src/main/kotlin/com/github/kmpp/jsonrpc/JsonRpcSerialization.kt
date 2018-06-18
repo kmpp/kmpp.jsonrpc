@@ -1,13 +1,14 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.ErrorJsonSaver
 import com.github.kmpp.jsonrpc.internal.ErrorSaver
 import com.github.kmpp.jsonrpc.internal.JSON_TREE_MAPPER
+import com.github.kmpp.jsonrpc.internal.JsonResultSaver
 import com.github.kmpp.jsonrpc.internal.RequestLoader
 import com.github.kmpp.jsonrpc.internal.RequestSaver
 import com.github.kmpp.jsonrpc.internal.ResponseLoader
 import com.github.kmpp.jsonrpc.internal.ResponseSaver
 import com.github.kmpp.jsonrpc.internal.ResultSaver
-import com.github.kmpp.jsonrpc.internal.StringErrorSaver
 import com.github.kmpp.jsonrpc.internal.convertToError
 import com.github.kmpp.jsonrpc.internal.parseParams
 import com.github.kmpp.jsonrpc.jsonast.JSON
@@ -48,29 +49,21 @@ fun loadRequest(json: String): ReadOutcome<Request<JsonElement>> {
     }
 }
 
-fun <P> ClientRequest<JsonElement>.parseRequestParams(
-    parser: (JsonElement) -> P
-): ReadOutcome<ClientRequest<P>> = this.parseParams(parser) {
-    ClientRequest(
-        method,
-        params?.let(parser),
-        id
-    )
-}
-
-fun <P> Notification<JsonElement>.parseNotificationParams(
-    parser: (JsonElement) -> P
-): ReadOutcome<Notification<P>> = this.parseParams(parser) {
-    Notification(
-        method,
-        params?.let(parser)
-    )
+fun <P> Request<JsonElement>.parseParams(parser: (JsonElement) -> P): ReadOutcome<Request<P>> {
+    return when (this) {
+        is ClientRequest<JsonElement> -> this.parseParams(parser) {
+            ClientRequest(method, params?.let(parser), id)
+        }
+        is Notification<JsonElement> -> this.parseParams(parser) {
+            Notification(method, params?.let(parser))
+        }
+    }
 }
 
 fun <R> getResultSaver(resultSaver: KSerialSaver<R>): KSerialSaver<Result<R>> =
     ResultSaver(resultSaver)
 
-fun saveStringError(error: Error<String>) = JSON.stringify(StringErrorSaver, error)
+fun saveErrorJson(error: Error<JsonElement>) = JSON.stringify(ErrorJsonSaver, error)
 
 fun <E> getErrorSaver(errorDataSaver: KSerialSaver<E>): KSerialSaver<Error<E>> =
     ErrorSaver(errorDataSaver)
@@ -92,6 +85,8 @@ fun <R, E> saveResponse(saver: KSerialSaver<Response<R, E>>, response: Response<
 
 fun <R> saveResult(saver: KSerialSaver<Result<R>>, result: Result<R>): String =
     JSON.stringify(saver, result)
+
+fun saveResultJson(result: Result<JsonElement>): String = saveResult(JsonResultSaver, result)
 
 fun <E> saveError(saver: KSerialSaver<Error<E>>, error: Error<E>): String =
     JSON.stringify(saver, error)

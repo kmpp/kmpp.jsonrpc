@@ -206,15 +206,15 @@ class SerializationTest {
     fun testUtilityParsers() {
         val nullElem = JsonNull
         assertEquals("null", PrimitiveReader(nullElem).str)
-        val stringElem = JsonTreeParser("\"Lucy & Pierre\"").readFully()
-        assertEquals("Lucy & Pierre", StringReader(stringElem))
+        val stringElem = JsonTreeParser("\"meow\"").readFully()
+        assertEquals("meow", StringReader(stringElem))
         val booleanElem = JsonTreeParser("true").readFully()
         assertEquals(true, BooleanReader(booleanElem))
-        val intElem = JsonTreeParser("20171207").readFully()
-        assertEquals(20171207, IntReader(intElem))
+        val intElem = JsonTreeParser("1066").readFully()
+        assertEquals(1066, IntReader(intElem))
         val longElem = JsonTreeParser("10000000000000").readFully()
         assertEquals(10000000000000, LongReader(longElem))
-        val doubleElem = JsonTreeParser("2016.0224").readFully()
-        assertEquals(2016.0224, DoubleReader(doubleElem))
+        val doubleElem = JsonTreeParser("98.5").readFully()
+        assertEquals(98.5, DoubleReader(doubleElem))
     }
 }
