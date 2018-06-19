@@ -7,9 +7,11 @@ import com.github.kmpp.jsonrpc.InvalidRequest
 import com.github.kmpp.jsonrpc.JsonRpcNullID
 import com.github.kmpp.jsonrpc.Notification
 import com.github.kmpp.jsonrpc.ParseError
-import com.github.kmpp.jsonrpc.ReadError
+import com.github.kmpp.jsonrpc.ReadFailure
 import com.github.kmpp.jsonrpc.ReadOutcome
+import com.github.kmpp.jsonrpc.ReadSuccess
 import com.github.kmpp.jsonrpc.Request
+import com.github.kmpp.jsonrpc.RequestError
 import com.github.kmpp.jsonrpc.jsonast.JsonArray
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
@@ -52,7 +54,7 @@ internal class RequestSaver<P>(
     }
 }
 
-internal object RequestLoader : KSerialLoader<Request<JsonElement>> {
+internal object RawRequestLoader : KSerialLoader<Request<JsonElement>> {
     override fun load(input: KInput): Request<JsonElement> {
         val tree = try {
             input.to<JsonObject>()
@@ -85,7 +87,7 @@ internal object RequestLoader : KSerialLoader<Request<JsonElement>> {
         }
 
         val paramsElement = tree["params"]
-        val params = paramsElement?.let { elem ->
+        val params: JsonElement? = paramsElement?.let { elem ->
             when (elem) {
                 is JsonObject, is JsonArray -> elem
                 else -> throw InvalidRequestException(
@@ -101,9 +103,6 @@ internal object RequestLoader : KSerialLoader<Request<JsonElement>> {
 
     override fun update(input: KInput, old: Request<JsonElement>): Request<JsonElement> =
         throw UnsupportedOperationException("Update not supported")
-
-    internal fun <P> withParamsReader(reader: (JsonElement) -> P): KSerialLoader<Request<P>> =
-        RequestLoaderWithParamsReader(reader)
 }
 
 internal fun <I : Request<JsonElement>, O : Request<P>, P> I.parseParams(
@@ -111,9 +110,9 @@ internal fun <I : Request<JsonElement>, O : Request<P>, P> I.parseParams(
     toType: I.(P?) -> O
 ): ReadOutcome<O> {
     return try {
-        ReadOutcome.validRequest(tryParseParams(parser, toType))
+        ReadSuccess(tryParseParams(parser, toType))
     } catch (e: InvalidParamsException) {
-        ReadOutcome.error(InvalidParams(e.message, e.id))
+        ReadFailure(InvalidParams(e.message, e.id))
     }
 }
 
@@ -140,12 +139,12 @@ private fun <I : Request<JsonElement>, O : Request<P>, P> I.tryParseParams(
     return this.toType(params)
 }
 
-private class RequestLoaderWithParamsReader<P>(
+internal class RequestLoader<P>(
     private val paramsParser: (JsonElement) -> P
 ) : KSerialLoader<Request<P>> {
 
     override fun load(input: KInput): Request<P> {
-        val rawRequest = RequestLoader.load(input)
+        val rawRequest = RawRequestLoader.load(input)
         return rawRequest.tryParseParams(paramsParser) { parsedParams: P? ->
             when (this) {
                 is ClientRequest -> ClientRequest(
@@ -165,7 +164,7 @@ private class RequestLoaderWithParamsReader<P>(
         throw UnsupportedOperationException("Update not supported")
 }
 
-internal fun convertToError(e: Exception): ReadError {
+internal fun convertToError(e: Exception): RequestError {
     return when (e) {
         is JsonParseException -> ParseError(e.message?.firstLine())
         is InvalidRequestException -> InvalidRequest(

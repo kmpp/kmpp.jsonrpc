@@ -5,7 +5,7 @@ import com.github.kmpp.jsonrpc.InternalError
 import com.github.kmpp.jsonrpc.InvalidParams
 import com.github.kmpp.jsonrpc.InvalidRequest
 import com.github.kmpp.jsonrpc.ParseError
-import com.github.kmpp.jsonrpc.ReadError
+import com.github.kmpp.jsonrpc.RequestError
 import com.github.kmpp.jsonrpc.internalError
 import com.github.kmpp.jsonrpc.invalidParams
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
@@ -28,36 +28,31 @@ private val serialClassDesc: KSerialClassDesc =
         addElement("data")
     }
 
-internal class ErrorObjectSaver<E>(
-    private val dataSaver: KSerialSaver<E>
-) : KSerialSaver<ErrorObject<E>> {
-    override fun save(output: KOutput, obj: ErrorObject<E>) {
+internal object ErrorObjectSaver : KSerialSaver<ErrorObject> {
+    override fun save(output: KOutput, obj: ErrorObject) {
         @Suppress("NAME_SHADOWING")
         val output = output.writeBegin(serialClassDesc)
 
         output.writeIntElementValue(serialClassDesc, 0, obj.code)
         output.writeStringElementValue(serialClassDesc, 1, obj.message)
-        obj.data?.let { output.writeSerializableElementValue(serialClassDesc, 2, dataSaver, it) }
+        obj.data?.let { output.writeSerializableElementValue(serialClassDesc, 2, JsonSaver, it) }
 
         output.writeEnd(serialClassDesc)
     }
 }
 
-internal object ErrorObjectLoader : KSerialLoader<ErrorObject<JsonElement>> {
-    override fun load(input: KInput): ErrorObject<JsonElement> {
+internal object ErrorObjectLoader : KSerialLoader<ErrorObject> {
+    override fun load(input: KInput): ErrorObject {
         val tree = input.to<JsonObject>()
 
         return tree.toErrorObject()
     }
 
-    override fun update(input: KInput, old: ErrorObject<JsonElement>): ErrorObject<JsonElement> =
+    override fun update(input: KInput, old: ErrorObject): ErrorObject =
         throw UpdateNotSupportedException("Update not supported")
-
-    internal fun <E> withDataReader(reader: (JsonElement) -> E): KSerialLoader<ErrorObject<E>> =
-        ErrorObjectLoaderWithDataReader(reader)
 }
 
-internal fun JsonObject.toErrorObject(): ErrorObject<JsonElement> {
+internal fun JsonObject.toErrorObject(): ErrorObject {
     val codeElem = this.getRequired<JsonLiteral>("code", JsonObject::getAsValue)
     val code = try {
         codeElem.asInt
@@ -72,29 +67,13 @@ internal fun JsonObject.toErrorObject(): ErrorObject<JsonElement> {
     return ErrorObject(code, message, data)
 }
 
-internal class ErrorObjectLoaderWithDataReader<E>(
-    private val dataReader: (JsonElement) -> E
-) : KSerialLoader<ErrorObject<E>> {
-    override fun load(input: KInput): ErrorObject<E> {
-        val rawErrorObject = ErrorObjectLoader.load(input)
-        return ErrorObject(
-            rawErrorObject.code,
-            rawErrorObject.message,
-            rawErrorObject.data?.let(dataReader)
-        )
-    }
-
-    override fun update(input: KInput, old: ErrorObject<E>): ErrorObject<E> =
-        throw UnsupportedOperationException("Update not supported")
-}
-
-private fun <E> parseError(data: E? = null): ErrorObject<E> =
+private fun parseError(data: JsonElement? = null): ErrorObject =
     ErrorObject(code = -32700, message = "Parse error", data = data)
 
-private fun <E> invalidRequest(data: E? = null): ErrorObject<E> =
+private fun invalidRequest(data: JsonElement? = null): ErrorObject =
     ErrorObject(code = -32600, message = "Invalid Request", data = data)
 
-internal fun ReadError.toErrorObject(): ErrorObject<JsonElement> = when (this) {
+internal fun RequestError.toErrorObject(): ErrorObject = when (this) {
     is ParseError -> parseError(jsonStringFromNullable(details))
     is InvalidRequest -> invalidRequest(jsonStringFromNullable(details))
     is InvalidParams -> invalidParams(jsonStringFromNullable(details))

@@ -26,34 +26,29 @@ data class Notification<P>(
     override val params: P? = null
 ) : Request<P>(method, params)
 
-@Suppress("unused") // IntelliJ incorrectly sees type params as unused
-sealed class Response<R, E>(
+sealed class Response<out R>(
+    open val result: R?,
+    open val error: ErrorObject?,
     open val id: JsonRpcID
 ) : JsonRpc()
 
 data class Result<R>(
-    val result: R,
+    override val result: R,
     override val id: JsonRpcID
-) : Response<R, Nothing>(id) {
-    @Suppress("UNCHECKED_CAST")
-    inline fun <reified E> coerceErrorType() = this as Response<R, E>
-}
+) : Response<R>(result = result, error = null, id = id)
 
-data class Error<E>(
-    val error: ErrorObject<E>,
+data class Error(
+    override val error: ErrorObject,
     override val id: JsonRpcID
-) : Response<Nothing, E>(id) {
-    @Suppress("UNCHECKED_CAST")
-    inline fun <reified R> coerceResultType() = this as Response<R, E>
-}
+) : Response<Nothing>(result = null, error = error, id = id)
 
-data class ErrorObject<E>(
+data class ErrorObject(
     val code: Int,
     val message: String,
-    val data: E? = null
-)
-
-fun <E> ErrorObject<E>.toError(id: JsonRpcID): Error<E> = Error(this, id)
+    val data: JsonElement? = null
+) {
+    fun toError(id: JsonRpcID) = Error(this, id)
+}
 
 sealed class JsonRpcID {
     companion object {
@@ -68,42 +63,43 @@ object JsonRpcNullID : JsonRpcID() {
     override fun toString() = "JsonRpcNullID(id=null)"
 }
 
-@Suppress("unused") // IntelliJ incorrectly sees type param as unused
-sealed class ReadOutcome<T> {
-    companion object {
-        fun <T> validRequest(request: T): ReadOutcome<T> = ReadSuccess(request)
+sealed class ReadOutcome<out T>(
+    open val success: T?,
+    open val failure: RequestError?
+)
 
-        @Suppress("UNCHECKED_CAST")
-        fun <T> error(error: ReadError): ReadOutcome<T> = error as ReadOutcome<T>
-    }
+data class ReadSuccess<T> internal constructor(
+    override val success: T
+) : ReadOutcome<T>(success = success, failure = null)
+
+data class ReadFailure(
+    override val failure: RequestError
+) : ReadOutcome<Nothing>(success = null, failure = failure)
+
+fun methodNotFound(data: JsonElement? = null): ErrorObject =
+    ErrorObject(code = -32601, message = "Method not found", data = data)
+
+fun invalidParams(data: JsonElement? = null): ErrorObject =
+    ErrorObject(code = -32602, message = "Invalid params", data = data)
+
+fun internalError(data: JsonElement? = null): ErrorObject =
+    ErrorObject(code = -32603, message = "Internal error", data = data)
+
+fun serverError(code: Int, data: JsonElement? = null): ErrorObject {
+    require(code in -32099..-32000) { "code=$code outside JSON-RPC server error range" }
+    return ErrorObject(code = code, message = "Server error", data = data)
 }
 
-data class ReadSuccess<T> internal constructor(val parsed: T) : ReadOutcome<T>()
-
-sealed class ReadError(
+sealed class RequestError(
     open val details: String?,
     open val id: JsonRpcID
-) : ReadOutcome<Any>() {
-    val errorJson: Error<JsonElement> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+) {
+    val error: Error by lazy(LazyThreadSafetyMode.PUBLICATION) {
         Error(this.toErrorObject(), id)
     }
     val errorJsonString: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        saveErrorJson(errorJson)
+        saveErrorJson(error)
     }
-}
-
-fun <E> methodNotFound(data: E? = null): ErrorObject<E> =
-    ErrorObject(code = -32601, message = "Method not found", data = data)
-
-fun <E> invalidParams(data: E? = null): ErrorObject<E> =
-    ErrorObject(code = -32602, message = "Invalid params", data = data)
-
-fun <E> internalError(data: E? = null): ErrorObject<E> =
-    ErrorObject(code = -32603, message = "Internal error", data = data)
-
-fun <E> serverError(code: Int, data: E? = null): ErrorObject<E> {
-    require(code in -32099..-32000) { "code=$code outside JSON-RPC server error range" }
-    return ErrorObject(code = code, message = "Server error", data = data)
 }
 
 /**
@@ -111,12 +107,12 @@ fun <E> serverError(code: Int, data: E? = null): ErrorObject<E> {
  */
 data class ParseError internal constructor(
     override val details: String?
-) : ReadError(details, JsonRpcNullID)
+) : RequestError(details, JsonRpcNullID)
 
-sealed class RequestError(
+sealed class ClientRequestError(
     override val details: String?,
     override val id: JsonRpcID
-) : ReadError(details, id)
+) : RequestError(details, id)
 
 /**
  * An error raised when Request was valid JSON, but was not a valid JSON-RPC Request object
@@ -124,7 +120,7 @@ sealed class RequestError(
 data class InvalidRequest internal constructor(
     override val details: String?,
     override val id: JsonRpcID
-) : RequestError(details, id)
+) : ClientRequestError(details, id)
 
 /**
  * An error raised when Request was a valid JSON-RPC object, but the value present in `"params"`
@@ -133,9 +129,9 @@ data class InvalidRequest internal constructor(
 data class InvalidParams internal constructor(
     override val details: String?,
     override val id: JsonRpcID
-) : RequestError(details, id)
+) : ClientRequestError(details, id)
 
 data class InternalError internal constructor(
     override val details: String?
-) : RequestError(details, JsonRpcNullID)
+) : ClientRequestError(details, JsonRpcNullID)
 
