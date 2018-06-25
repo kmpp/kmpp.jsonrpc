@@ -18,6 +18,10 @@ import kotlinx.serialization.KSerialSaver
 val <T> KSerialLoader<T>.tree: (JsonElement) -> T
     get() = { jsonElement -> JSON_TREE_MAPPER.readTree(jsonElement, this) }
 
+fun <T> KSerialSaver<T>.treeWriter(): (T) -> JsonElement = { obj ->
+    JSON_TREE_MAPPER.writeTree(obj, this)
+}
+
 val <E> ((JsonElement) -> E).array: (JsonElement) -> List<E>
     get() = { (it as JsonArray).content.map(this) }
 
