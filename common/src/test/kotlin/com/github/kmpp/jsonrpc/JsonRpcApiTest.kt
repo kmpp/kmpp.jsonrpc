@@ -8,7 +8,6 @@ import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.internal.IntSerializer
 import kotlinx.serialization.internal.StringSerializer
-import kotlinx.serialization.list
 import kotlinx.serialization.map
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -265,80 +264,6 @@ class JsonRpcApiTest {
         )
     }
 
-    @Serializable
-    data class Result(val r: Int = 0)
-
-    @Test
-    fun testGoodRoundtrip() {
-        val request =
-            ClientRequest(method = "sum", params = listOf(4, 5), id = JsonRpcID("UUID-123"))
-        val requestSaver = getRequestSaver(IntSerializer.list)
-        val requestJson = saveRequest(requestSaver, request)
-        val rawRequest = loadRequest(requestJson)
-        rawRequest as ReadSuccess<Request<JsonElement>>
-        @Suppress("UNCHECKED_CAST")
-        rawRequest as ReadSuccess<ClientRequest<JsonElement>>
-        val typed = rawRequest.parsed.parseParams(IntReader.array)
-        @Suppress("UNCHECKED_CAST")
-        typed as ReadSuccess<ClientRequest<List<Int>>>
-        assertEquals(
-            typed.parsed,
-            ClientRequest("sum", listOf(4, 5), JsonRpcID("UUID-123"))
-        )
-        val params: List<Int> = typed.parsed.params!!
-        val resultObject = Result(params[0] + params[1])
-        val result: com.github.kmpp.jsonrpc.Result<Result> =
-            Result(result = resultObject, id = typed.parsed.id)
-        val resultSaver = getResultSaver(Result.serializer())
-        val resultJson = saveResult(resultSaver, result)
-        val resultLoader =
-            getResponseLoaderWithReaders(
-                Result.serializer().tree,
-                StringReader
-            )
-        val loadedResult =
-            loadResponse(resultLoader, resultJson)
-        assertEquals(
-            loadedResult,
-            Result(result = Result(9), id = JsonRpcID("UUID-123")).coerceErrorType()
-        )
-    }
-
-
-    @Serializable
-    data class OtherParams(val s1: String = "can't", val s2: String = "add")
-
-    @Test
-    fun testBadRoundtrip() {
-        val request =
-            ClientRequest(method = "sum", params = OtherParams(), id = JsonRpcID("UUID-123"))
-        val requestSaver =
-            getRequestSaver(OtherParams.serializer())
-        val requestJson = saveRequest(requestSaver, request)
-        val rawRequestReadResult = loadRequest(requestJson)
-        rawRequestReadResult as ReadSuccess<Request<JsonElement>>
-        val rawRequest = rawRequestReadResult.parsed as ClientRequest<JsonElement>
-        assertEquals(rawRequest.method, "sum")
-        val typedRequestReadResult = rawRequest.parseParams(Params.serializer().tree)
-        typedRequestReadResult as ReadFailure
-        val error = Error(typedRequestReadResult.toErrorObject(), rawRequest.id)
-        val resultJson = saveError(ErrorJsonSaver, error)
-        val resultLoader =
-            getResponseLoaderWithReaders(
-                Result.serializer().tree,
-                StringReader
-            )
-        val loadedResult =
-            loadResponse(resultLoader, resultJson)
-        assertEquals(
-            loadedResult,
-            Error(
-                error = invalidParams("Unable to load params: Field i1 is required, but it was missing"),
-                id = JsonRpcID("UUID-123")
-            )
-        )
-    }
-
     private inline fun <reified T : JsonElement> expectValidRequest(
         method: String, id: JsonRpcID, json: String
     ) {
@@ -373,16 +298,16 @@ class JsonRpcApiTest {
         val parsed = loadRawRequest(json)
         when (parsed) {
             !is ReadFailure -> fail("Should have had error result")
-            else -> assertTrue { parsed is T }
+            else -> assertTrue("parsed $parsed should match type") { parsed.failure is T }
         }
     }
 
-    private fun expectInvalidParamsError(loader: KSerialLoader<*>, json: String) {
+    private fun <T> expectInvalidParamsError(loader: KSerialLoader<T>, json: String) {
         val readOutcome = loadRawRequest(json) as ReadSuccess<Request<JsonElement>>
         val parsedMessage = readOutcome.success as ClientRequest<JsonElement>
         val typed = parsedMessage.parseParams(loader.tree)
         when (typed) {
-            !is RequestError -> fail("Should have had error result")
+            !is ReadFailure -> fail("Should have had error result")
             else -> assertTrue {
                 @Suppress("USELESS_CAST")
                 (typed.failure is InvalidParams)

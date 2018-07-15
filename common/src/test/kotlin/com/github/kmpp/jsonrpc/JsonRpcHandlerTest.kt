@@ -5,6 +5,8 @@ import com.github.kmpp.jsonrpc.internal.toStringJson
 import com.github.kmpp.jsonrpc.jsonast.JsonArray
 import com.github.kmpp.jsonrpc.jsonast.JsonElement
 import com.github.kmpp.jsonrpc.jsonast.JsonObject
+import kotlinx.serialization.KSerialLoader
+import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.internal.IntSerializer
 import kotlinx.serialization.internal.StringSerializer
@@ -16,25 +18,35 @@ class JsonRpcHandlerTest {
     @Serializable
     data class IntInput(val input: Int = 0)
 
-    object MathOpsRpcRequestHandler : JsonRpcRequestHandler<JsonElement, Nothing> {
-        private val intResultSaver = ResponseSaver(IntSerializer)
+    object MathOpsRpcRequestHandler : JsonRpcRequestHandler<JsonElement, Int> {
+        override val requestReader: KSerialLoader<Request<JsonElement>>
+                = getRequestLoader { it -> it }
+        override val resultWriter: KSerialSaver<Response<Int>> = ResponseSaver(IntSerializer)
 
-        var outcome = Int.MIN_VALUE
+        override fun handleRequest(request: Request<JsonElement>): Response<Int>? {
+            return when (request) {
+                is ClientRequest<JsonElement> -> handleClientRequest(request)
+                is Notification<JsonElement> -> {
+                    handleNotification(request)
+                    return null
+                }
+            }
+        }
 
-        override fun handleClientRequest(request: ClientRequest<JsonElement>): Output<Nothing> {
-            println("**> REQUEST : ${request.method} ${request.params}")
+        override fun handleClientRequest(clientRequest: ClientRequest<JsonElement>): Response<Int> {
+            println("**> REQUEST : ${clientRequest.method} ${clientRequest.params}")
 
-            val id = request.id
+            val id = clientRequest.id
             val params: JsonElement
-            if (request.params == null) {
-                val error = invalidParams(request.params.toStringJson()).toError(id)
+            if (clientRequest.params == null) {
+                val error = invalidParams(clientRequest.params.toStringJson()).toError(id)
                 return handleError(error)
             } else {
                 @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                params = request.params!!
+                params = clientRequest.params!!
             }
 
-            val result: Result<Int> = when (request.method) {
+            val result: Result<Int> = when (clientRequest.method) {
 
                 "subtract" -> when (params) {
                     is JsonArray -> {
@@ -66,13 +78,13 @@ class JsonRpcHandlerTest {
                 }
 
                 "square" -> {
-                    val readParamsOutcome = request.parseParams(IntInput.serializer().tree)
+                    val readParamsOutcome = clientRequest.parseParams(IntInput.serializer().tree)
                     when (readParamsOutcome) {
                         is ReadFailure -> {
-                            return handleError(readParamsOutcome.errorJson)
+                            return handleError(readParamsOutcome.failure.error)
                         }
                         is ReadSuccess<Request<IntInput>> -> {
-                            val intInput = readParamsOutcome.parsed.params!! // null already handled
+                            val intInput = readParamsOutcome.success.params!! // null handled above
                             val input: Int = intInput.input
                             Result(input * input, id)
                         }
@@ -84,14 +96,13 @@ class JsonRpcHandlerTest {
                 }
             }
 
-            outcome = result.result
+            val outcome = result.result
             println("<** RESULT  : ${result.result}")
-            return Output(jsonResponse = saveResult(intResultSaver, result))
+            return Result(outcome, id)
         }
 
-        override fun handleNotification(notification: Notification<JsonElement>): Output<Nothing> {
+        override fun handleNotification(notification: Notification<JsonElement>) {
             println("**> NOTIFY  : ${notification.method} ${notification.params}")
-            return Output()
         }
     }
 
@@ -103,6 +114,6 @@ class JsonRpcHandlerTest {
 
     private fun MathOpsRpcRequestHandler.handle(json: String) {
         println("--> REQUEST : $json")
-        println("<-- RESPONSE: ${handleRequest(json)}")
+        println("<-- RESPONSE: ${readAndHandleRequest(json)}")
     }
 }
