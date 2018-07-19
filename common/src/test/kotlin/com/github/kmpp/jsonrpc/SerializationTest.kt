@@ -2,15 +2,14 @@ package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.internal.JsonRpcIDSerializer
 import com.github.kmpp.jsonrpc.internal.RequestLoader
-import com.github.kmpp.jsonrpc.jsonast.JSON
-import com.github.kmpp.jsonrpc.jsonast.JsonNull
-import com.github.kmpp.jsonrpc.jsonast.JsonTreeParser
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Optional
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JSON
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonTreeParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -31,7 +30,7 @@ class SerializationTest {
         roundtrip(JsonRpcIDSerializer, JsonRpcID(id = "5"))
         roundtrip(JsonRpcIDSerializer, JsonRpcID(id = 5L))
         assertEquals(JsonRpcStringID(id = "id"), parse(JsonRpcIDSerializer, "\"id\""))
-        assertFailsWith(SerializationException::class) { parse(JsonRpcIDSerializer, "1234.5678") }
+        assertFailsWith(NumberFormatException::class) { parse(JsonRpcIDSerializer, "1234.5678") }
     }
 
     @Test
@@ -54,7 +53,7 @@ class SerializationTest {
             ),
             ClientRequest<Data>("m", null, JsonRpcID("id"))
         )
-        assertFailsWith(SerializationException::class) {
+        assertFailsWith(NumberFormatException::class) {
             parse(
                 loader, """{"jsonrpc":"2.0",
             "method":"m","id":123.456}"""
@@ -199,7 +198,7 @@ class SerializationTest {
     @Test
     fun testUtilityParsers() {
         val nullElem = JsonNull
-        assertEquals("null", PrimitiveReader(nullElem).str)
+        assertEquals("null", PrimitiveReader(nullElem).content)
         val stringElem = JsonTreeParser("\"meow\"").readFully()
         assertEquals("meow", StringReader(stringElem))
         val booleanElem = JsonTreeParser("true").readFully()

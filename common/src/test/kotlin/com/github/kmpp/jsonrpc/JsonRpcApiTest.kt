@@ -1,13 +1,13 @@
 package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.internal.json
-import com.github.kmpp.jsonrpc.jsonast.JsonArray
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.internal.IntSerializer
 import kotlinx.serialization.internal.StringSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.map
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -72,7 +72,7 @@ class JsonRpcApiTest {
         )
         request<Nothing>(
             json = """{"jsonrpc": "2.0", "method": 1, "params": "bar"}""",
-            expResponseJson = """{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request","data":"Invalid JSON-RPC Request: element[1] JSON type did not match expected class JsonString"},"id":null}"""
+            expResponseJson = """{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request","data":"\"params\" must be omitted or contain JSON Object or Array"},"id":null}"""
         )
     }
 
@@ -116,7 +116,7 @@ class JsonRpcApiTest {
         println("**> REQUEST: ${request.method} ${request.params}")
         return when (request.method) {
             "sum" -> {
-                val sumResult = getResult(request, IntReader.array) { intList ->
+                val sumResult = getResult(request, IntReader.array) { intList: List<Int>? ->
                     intList?.sum() ?: 0
                 }
                 checkExpected(expected, sumResult)
@@ -135,7 +135,7 @@ class JsonRpcApiTest {
 
                 val subtractResult: Response<Int> = when (request.params) {
                     is JsonArray -> {
-                        getResult(request, IntReader.array) { intList ->
+                        getResult(request, IntReader.array) { intList: List<Int>? ->
                             intList!!
                             assertTrue { intList.size == 2 }
                             intList[0] - intList[1]

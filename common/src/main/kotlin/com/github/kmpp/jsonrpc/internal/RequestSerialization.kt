@@ -12,16 +12,16 @@ import com.github.kmpp.jsonrpc.ReadOutcome
 import com.github.kmpp.jsonrpc.ReadSuccess
 import com.github.kmpp.jsonrpc.Request
 import com.github.kmpp.jsonrpc.RequestError
-import com.github.kmpp.jsonrpc.jsonast.JsonArray
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
-import com.github.kmpp.jsonrpc.jsonast.JsonString
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialClassDesc
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.internal.SerialClassDescImpl
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonLiteral
+import kotlinx.serialization.json.JsonObject
 
 private val serialClassDesc: KSerialClassDesc =
     SerialClassDescImpl("com.github.kmpp.jsonrpc.Request").apply {
@@ -63,22 +63,11 @@ internal object RawRequestLoader : KSerialLoader<Request<JsonElement>> {
         }
 
         // Try to parse the ID first so we can make a best effort to include it in error messages
-        val id = if ("id" in tree) {
-            try {
-                tree.readJsonRpcID()
-            } catch (e: Exception) {
-                throw InvalidRequestException(
-                    "Invalid id ${tree["id"]}: ${e.message}",
-                    null
-                )
-            }
-        } else {
-            null
-        }
+        val id = tree.getPrimitiveOrNull("id")?.readJsonRpcID()
 
         val method = try {
             tree.checkJsonrpc()
-            tree.getRequired<JsonString>("method", JsonObject::getAsValue).str
+            tree.getRequired<JsonLiteral>("method", JsonObject::getPrimitive).content
         } catch (e: Exception) {
             throw InvalidRequestException(
                 "Invalid JSON-RPC Request: ${e.message}",
@@ -86,7 +75,7 @@ internal object RawRequestLoader : KSerialLoader<Request<JsonElement>> {
             )
         }
 
-        val paramsElement = tree["params"]
+        val paramsElement = tree.getOrNull("params")
         val params: JsonElement? = paramsElement?.let { elem ->
             when (elem) {
                 is JsonObject, is JsonArray -> elem

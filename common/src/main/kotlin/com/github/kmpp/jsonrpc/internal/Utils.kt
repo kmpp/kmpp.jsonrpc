@@ -2,16 +2,16 @@ package com.github.kmpp.jsonrpc.internal
 
 import com.github.kmpp.jsonrpc.JSON_RPC
 import com.github.kmpp.jsonrpc.JsonRpcID
-import com.github.kmpp.jsonrpc.jsonast.JSON
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonNull
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
-import com.github.kmpp.jsonrpc.jsonast.JsonString
-import com.github.kmpp.jsonrpc.jsonast.JsonTreeMapper
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JSON
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonLiteral
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonTreeMapper
 
 internal inline fun <reified E : JsonElement> JsonObject.getRequired(
     key: String,
@@ -31,8 +31,8 @@ internal inline fun <reified E : JsonElement> JsonObject.getRequired(
 }
 
 internal fun JsonObject.checkJsonrpc() {
-    this.getRequired<JsonString>("jsonrpc", JsonObject::getAsValue).let { jsonString ->
-        require(jsonString.str == JSON_RPC) {
+    this.getRequired<JsonLiteral>("jsonrpc", JsonObject::get).let { jsonString ->
+        require(jsonString.content == JSON_RPC) {
             "\"$JSON_RPC\" is only supported non-null value for \"jsonrpc\""
         }
     }
@@ -45,7 +45,7 @@ internal inline fun <reified E : JsonElement> KInput.to(): E {
             ?: throw SerializationException("Expected ${E::class} but had ${jsonReader.readAsTree()}")
 }
 
-internal fun String.json(): JsonElement = JsonString(this)
+internal fun String.json(): JsonElement = JsonLiteral(this)
 
 internal object JsonSaver : KSerialSaver<JsonElement> {
     override fun save(output: KOutput, obj: JsonElement) {
@@ -55,7 +55,8 @@ internal object JsonSaver : KSerialSaver<JsonElement> {
     }
 }
 
-internal fun jsonStringFromNullable(content: String?): JsonString? = content?.let { JsonString(it) }
+internal fun jsonStringFromNullable(content: String?): JsonLiteral? =
+    content?.let { JsonLiteral(it) }
 
 internal class JsonParseException(msg: String) : SerializationException(msg)
 
@@ -66,6 +67,6 @@ internal class InvalidRequestException(msg: String, val id: JsonRpcID?) :
 internal class InvalidParamsException(msg: String, val id: JsonRpcID) : SerializationException(msg)
 
 internal fun <T> T?.toStringJson(): JsonElement =
-    this?.let { JsonString(it.toString()) } ?: JsonNull
+    this?.let { JsonLiteral(it.toString()) } ?: JsonNull
 
 internal val JSON_TREE_MAPPER = JsonTreeMapper()

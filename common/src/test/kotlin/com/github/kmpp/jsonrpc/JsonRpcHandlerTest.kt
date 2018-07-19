@@ -2,14 +2,14 @@ package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.internal.ResponseSaver
 import com.github.kmpp.jsonrpc.internal.toStringJson
-import com.github.kmpp.jsonrpc.jsonast.JsonArray
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.internal.IntSerializer
 import kotlinx.serialization.internal.StringSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.map
 import kotlin.test.Test
 
@@ -74,7 +74,8 @@ class JsonRpcHandlerTest {
                 }
 
                 "sum" -> {
-                    Result(IntReader.array.invoke(params).sum(), id)
+                    val intList: List<Int> = IntReader.array.invoke(params)
+                    Result(intList.sum(), id)
                 }
 
                 "square" -> {

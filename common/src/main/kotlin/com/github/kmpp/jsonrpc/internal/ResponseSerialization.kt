@@ -4,8 +4,6 @@ import com.github.kmpp.jsonrpc.Error
 import com.github.kmpp.jsonrpc.ErrorObject
 import com.github.kmpp.jsonrpc.Response
 import com.github.kmpp.jsonrpc.Result
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialLoader
@@ -13,6 +11,8 @@ import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.UpdateNotSupportedException
 import kotlinx.serialization.internal.SerialClassDescImpl
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 private val serialClassDesc = SerialClassDescImpl("com.github.kmpp.jsonrpc.Response")
     .apply {
@@ -78,9 +78,9 @@ internal object RawResponseLoader : KSerialLoader<Response<JsonElement>> {
         val id = tree.readJsonRpcID()
 
         return when {
-            "result" in tree -> Result(tree["result"]!!, id)
+            "result" in tree -> Result(tree["result"], id)
             "error" in tree -> {
-                val errorObjectTree = tree.getRequired<JsonObject>("error", JsonObject::getAsObject)
+                val errorObjectTree = tree.getObject("error")
                 val error = errorObjectTree.toErrorObject()
                 Error(error, id)
             }

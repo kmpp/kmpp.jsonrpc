@@ -8,12 +8,12 @@ import com.github.kmpp.jsonrpc.internal.RequestSaver
 import com.github.kmpp.jsonrpc.internal.ResponseSaver
 import com.github.kmpp.jsonrpc.internal.convertToError
 import com.github.kmpp.jsonrpc.internal.parseParams
-import com.github.kmpp.jsonrpc.jsonast.JSON
-import com.github.kmpp.jsonrpc.jsonast.JsonArray
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonPrimitive
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.KSerialSaver
+import kotlinx.serialization.json.JSON
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 val <T> KSerialLoader<T>.tree: (JsonElement) -> T
     get() = { jsonElement -> JSON_TREE_MAPPER.readTree(jsonElement, this) }
@@ -26,11 +26,11 @@ val <E> ((JsonElement) -> E).array: (JsonElement) -> List<E>
     get() = { (it as JsonArray).content.map(this) }
 
 val PrimitiveReader = { elem: JsonElement -> (elem as JsonPrimitive) }
-val StringReader = { elem: JsonElement -> PrimitiveReader(elem).str }
-val BooleanReader = { elem: JsonElement -> PrimitiveReader(elem).asBoolean }
-val IntReader = { elem: JsonElement -> PrimitiveReader(elem).asInt }
-val LongReader = { elem: JsonElement -> PrimitiveReader(elem).asLong }
-val DoubleReader = { elem: JsonElement -> PrimitiveReader(elem).asDouble }
+val StringReader = { elem: JsonElement -> PrimitiveReader(elem).content }
+val BooleanReader = { elem: JsonElement -> PrimitiveReader(elem).boolean }
+val IntReader = { elem: JsonElement -> PrimitiveReader(elem).int }
+val LongReader = { elem: JsonElement -> PrimitiveReader(elem).long }
+val DoubleReader = { elem: JsonElement -> PrimitiveReader(elem).double }
 
 fun <P> getRequestSaver(paramsSaver: KSerialSaver<P>): KSerialSaver<Request<P>> =
     RequestSaver(paramsSaver)

@@ -8,10 +8,6 @@ import com.github.kmpp.jsonrpc.ParseError
 import com.github.kmpp.jsonrpc.RequestError
 import com.github.kmpp.jsonrpc.internalError
 import com.github.kmpp.jsonrpc.invalidParams
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonLiteral
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
-import com.github.kmpp.jsonrpc.jsonast.JsonString
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialClassDesc
@@ -20,6 +16,9 @@ import kotlinx.serialization.KSerialSaver
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.UpdateNotSupportedException
 import kotlinx.serialization.internal.SerialClassDescImpl
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonLiteral
+import kotlinx.serialization.json.JsonObject
 
 private val serialClassDesc: KSerialClassDesc =
     SerialClassDescImpl("com.github.kmpp.jsonrpc.ErrorObject").apply {
@@ -53,14 +52,14 @@ internal object ErrorObjectLoader : KSerialLoader<ErrorObject> {
 }
 
 internal fun JsonObject.toErrorObject(): ErrorObject {
-    val codeElem = this.getRequired<JsonLiteral>("code", JsonObject::getAsValue)
+    val codeElem = this.getRequired<JsonLiteral>("code", JsonObject::get)
     val code = try {
-        codeElem.asInt
+        codeElem.int
     } catch (e: NumberFormatException) {
         throw SerializationException(e.toString())
     }
 
-    val message = this.getRequired<JsonString>("message", JsonObject::getAsValue).str
+    val message = this.getRequired<JsonLiteral>("message", JsonObject::get).content
 
     val data = this["data"]
 

@@ -4,41 +4,38 @@ import com.github.kmpp.jsonrpc.JsonRpcID
 import com.github.kmpp.jsonrpc.JsonRpcNullID
 import com.github.kmpp.jsonrpc.JsonRpcNumberID
 import com.github.kmpp.jsonrpc.JsonRpcStringID
-import com.github.kmpp.jsonrpc.jsonast.JSON
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
-import com.github.kmpp.jsonrpc.jsonast.JsonLiteral
-import com.github.kmpp.jsonrpc.jsonast.JsonNull
-import com.github.kmpp.jsonrpc.jsonast.JsonObject
-import com.github.kmpp.jsonrpc.jsonast.JsonPrimitive
-import com.github.kmpp.jsonrpc.jsonast.JsonString
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialClassDesc
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.internal.SerialClassDescImpl
+import kotlinx.serialization.json.JSON
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonLiteral
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 
-private fun JsonElement.readJsonRpcID(): JsonRpcID = when (this) {
+internal fun JsonElement.readJsonRpcID(): JsonRpcID = when (this) {
     is JsonPrimitive -> readJsonRpcID()
     else -> throw SerializationException("Could not read $this as JsonRpcID")
 }
 
-internal fun JsonObject.readJsonRpcID(): JsonRpcID = this.getAsValue("id").readJsonRpcID()
-
-private fun JsonPrimitive.readJsonRpcID(): JsonRpcID = when (this) {
-    is JsonString -> JsonRpcID(this.str)
-    is JsonLiteral -> {
-        if (this == JsonNull) {
-            JsonRpcNullID
+private fun JsonPrimitive.readJsonRpcID(): JsonRpcID {
+    println("Running readJsonRpcID on $this")
+    return when (this) {
+        is JsonNull -> JsonRpcNullID
+        is JsonLiteral -> if (isString()) {
+            println("reading as string")
+            JsonRpcStringID(content)
         } else {
-            try {
-                JsonRpcID(this.asLong)
-            } catch (e: NumberFormatException) {
-                throw SerializationException(e.toString())
-            }
+            println("reading as number")
+            JsonRpcNumberID(long)
         }
     }
 }
+
+private fun JsonPrimitive.isString(): Boolean = toString().startsWith('"')
 
 internal object JsonRpcIDSerializer : KSerializer<JsonRpcID> {
     override fun save(output: KOutput, obj: JsonRpcID) {

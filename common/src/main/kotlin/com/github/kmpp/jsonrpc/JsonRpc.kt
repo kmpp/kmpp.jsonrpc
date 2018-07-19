@@ -1,7 +1,7 @@
 package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.internal.toErrorObject
-import com.github.kmpp.jsonrpc.jsonast.JsonElement
+import kotlinx.serialization.json.JsonElement
 
 
 const val JSON_RPC = "2.0"
