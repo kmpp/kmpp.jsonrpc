@@ -1,7 +1,9 @@
 package com.github.kmpp.jsonrpc.internal
 
-import com.github.kmpp.jsonrpc.JSON_RPC
+import com.github.kmpp.jsonrpc.JSON_RPC_2_0
+import com.github.kmpp.jsonrpc.JsonReader
 import com.github.kmpp.jsonrpc.JsonRpcID
+import com.github.kmpp.jsonrpc.JsonWriter
 import kotlinx.serialization.KInput
 import kotlinx.serialization.KOutput
 import kotlinx.serialization.KSerialSaver
@@ -12,28 +14,12 @@ import kotlinx.serialization.json.JsonLiteral
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonTreeMapper
-
-internal inline fun <reified E : JsonElement> JsonObject.getRequired(
-    key: String,
-    readElem: JsonObject.(String) -> JsonElement
-): E {
-    if (key !in this) {
-        throw SerializationException("Did not find \"$key\" in tree")
-    }
-
-    val elem = this.readElem(key)
-    return when (elem) {
-        is E -> elem
-        else -> throw SerializationException(
-            "element[$elem] JSON type did not match expected ${E::class}"
-        )
-    }
-}
+import kotlinx.serialization.json.content
 
 internal fun JsonObject.checkJsonrpc() {
-    this.getRequired<JsonLiteral>("jsonrpc", JsonObject::get).let { jsonString ->
-        require(jsonString.content == JSON_RPC) {
-            "\"$JSON_RPC\" is only supported non-null value for \"jsonrpc\""
+    this["jsonrpc"].let { jsonString ->
+        require(jsonString.content == JSON_RPC_2_0) {
+            "\"$JSON_RPC_2_0\" is only supported non-null value for \"jsonrpc\""
         }
     }
 }
@@ -49,7 +35,7 @@ internal fun String.json(): JsonElement = JsonLiteral(this)
 
 internal object JsonSaver : KSerialSaver<JsonElement> {
     override fun save(output: KOutput, obj: JsonElement) {
-         val jsonWriter = output as? JSON.JsonOutput
+        val jsonWriter = output as? JSON.JsonOutput
                 ?: throw SerializationException("This class can be saved only by JSON")
         jsonWriter.writeTree(obj)
     }
@@ -70,3 +56,15 @@ internal fun <T> T?.toStringJson(): JsonElement =
     this?.let { JsonLiteral(it.toString()) } ?: JsonNull
 
 internal val JSON_TREE_MAPPER = JsonTreeMapper()
+
+internal object IntWriter : JsonWriter<Int>() {
+    override fun write(value: Int): JsonElement = JsonLiteral(value)
+}
+
+internal object IntReader : JsonReader<Int>() {
+    override fun read(json: JsonElement): Int = json.primitive.int
+}
+
+internal object JsonElementReader : JsonReader<JsonElement>() {
+    override fun read(json: JsonElement): JsonElement = json
+}

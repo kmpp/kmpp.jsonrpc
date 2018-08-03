@@ -4,66 +4,38 @@ import com.github.kmpp.jsonrpc.ErrorObject
 import com.github.kmpp.jsonrpc.InternalError
 import com.github.kmpp.jsonrpc.InvalidParams
 import com.github.kmpp.jsonrpc.InvalidRequest
+import com.github.kmpp.jsonrpc.JsonReader
+import com.github.kmpp.jsonrpc.JsonWriter
 import com.github.kmpp.jsonrpc.ParseError
 import com.github.kmpp.jsonrpc.RequestError
 import com.github.kmpp.jsonrpc.internalError
 import com.github.kmpp.jsonrpc.invalidParams
-import kotlinx.serialization.KInput
-import kotlinx.serialization.KOutput
-import kotlinx.serialization.KSerialClassDesc
-import kotlinx.serialization.KSerialLoader
-import kotlinx.serialization.KSerialSaver
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.UpdateNotSupportedException
-import kotlinx.serialization.internal.SerialClassDescImpl
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonLiteral
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.content
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.json
 
-private val serialClassDesc: KSerialClassDesc =
-    SerialClassDescImpl("com.github.kmpp.jsonrpc.ErrorObject").apply {
-        addElement("code")
-        addElement("message")
-        addElement("data")
-    }
+private const val CODE = "code"
+private const val MESSAGE = "message"
+private const val DATA = "data"
 
-internal object ErrorObjectSaver : KSerialSaver<ErrorObject> {
-    override fun save(output: KOutput, obj: ErrorObject) {
-        @Suppress("NAME_SHADOWING")
-        val output = output.writeBegin(serialClassDesc)
-
-        output.writeIntElementValue(serialClassDesc, 0, obj.code)
-        output.writeStringElementValue(serialClassDesc, 1, obj.message)
-        obj.data?.let { output.writeSerializableElementValue(serialClassDesc, 2, JsonSaver, it) }
-
-        output.writeEnd(serialClassDesc)
+internal object ErrorObjectWriter : JsonWriter<ErrorObject>() {
+    override fun write(value: ErrorObject): JsonElement = json {
+        CODE to value.code
+        MESSAGE to value.message
+        value.data?.let { DATA to it }
     }
 }
 
-internal object ErrorObjectLoader : KSerialLoader<ErrorObject> {
-    override fun load(input: KInput): ErrorObject {
-        val tree = input.to<JsonObject>()
+internal object ErrorObjectReader : JsonReader<ErrorObject>() {
+    override fun read(json: JsonElement): ErrorObject {
+        val jsonObject = json.jsonObject
 
-        return tree.toErrorObject()
+        val code = jsonObject[CODE].int
+        val message = jsonObject[MESSAGE].content
+        val data = jsonObject.getOrNull(DATA)
+        return ErrorObject(code, message, data)
     }
-
-    override fun update(input: KInput, old: ErrorObject): ErrorObject =
-        throw UpdateNotSupportedException("Update not supported")
-}
-
-internal fun JsonObject.toErrorObject(): ErrorObject {
-    val codeElem = this.getRequired<JsonLiteral>("code", JsonObject::get)
-    val code = try {
-        codeElem.int
-    } catch (e: NumberFormatException) {
-        throw SerializationException(e.toString())
-    }
-
-    val message = this.getRequired<JsonLiteral>("message", JsonObject::get).content
-
-    val data = this["data"]
-
-    return ErrorObject(code, message, data)
 }
 
 private fun parseError(data: JsonElement? = null): ErrorObject =

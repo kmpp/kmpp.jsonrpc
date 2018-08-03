@@ -8,10 +8,11 @@ import com.github.kmpp.jsonrpc.ReadOutcome
 import com.github.kmpp.jsonrpc.ReadSuccess
 import com.github.kmpp.jsonrpc.Request
 import com.github.kmpp.jsonrpc.Response
-import com.github.kmpp.jsonrpc.load
+import com.github.kmpp.jsonrpc.readOutcome
 
-internal fun <P, R> JsonRpcRequestHandler<P, R>.readAndHandleRequest0(json: String): Response<R>? {
-    val readOutcome: ReadOutcome<Request<P>> = requestReader.load(json)
+internal fun <P : Any, R : Any> JsonRpcRequestHandler<P, R>.readAndHandleRequest0(json: String):
+        Response<R>? {
+    val readOutcome: ReadOutcome<Request<P>> = requestReader.readOutcome(json)
     return when (readOutcome) {
         is ReadFailure -> {
             handleError(readOutcome.failure.error)

@@ -4,7 +4,9 @@ import com.github.kmpp.jsonrpc.ClientRequest
 import com.github.kmpp.jsonrpc.InternalError
 import com.github.kmpp.jsonrpc.InvalidParams
 import com.github.kmpp.jsonrpc.InvalidRequest
+import com.github.kmpp.jsonrpc.JsonReader
 import com.github.kmpp.jsonrpc.JsonRpcNullID
+import com.github.kmpp.jsonrpc.JsonWriter
 import com.github.kmpp.jsonrpc.Notification
 import com.github.kmpp.jsonrpc.ParseError
 import com.github.kmpp.jsonrpc.ReadFailure
@@ -12,73 +14,41 @@ import com.github.kmpp.jsonrpc.ReadOutcome
 import com.github.kmpp.jsonrpc.ReadSuccess
 import com.github.kmpp.jsonrpc.Request
 import com.github.kmpp.jsonrpc.RequestError
-import kotlinx.serialization.KInput
-import kotlinx.serialization.KOutput
-import kotlinx.serialization.KSerialClassDesc
-import kotlinx.serialization.KSerialLoader
-import kotlinx.serialization.KSerialSaver
-import kotlinx.serialization.internal.SerialClassDescImpl
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonLiteral
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.json
 
-private val serialClassDesc: KSerialClassDesc =
-    SerialClassDescImpl("com.github.kmpp.jsonrpc.Request").apply {
-        addElement("jsonrpc")
-        addElement("method")
-        addElement("params")
-        addElement("id")
-    }
+private const val JSONRPC = "jsonrpc"
+private const val METHOD = "method"
+private const val PARAMS = "params"
+private const val ID = "id"
 
-internal class RequestSaver<P>(
-    private val paramsSaver: KSerialSaver<P>
-) : KSerialSaver<Request<P>> {
-    override fun save(output: KOutput, obj: Request<P>) {
-        @Suppress("NAME_SHADOWING")
-        val output = output.writeBegin(serialClassDesc)
+internal object RawRequestReader : RequestReader<JsonElement>(JsonElementReader)
 
-        output.writeStringElementValue(serialClassDesc, 0, obj.jsonrpc)
-        output.writeStringElementValue(serialClassDesc, 1, obj.method)
-        obj.params?.let {
-            output.writeSerializableElementValue(serialClassDesc, 2, paramsSaver, it)
-        }
-        if (obj is ClientRequest<P>) {
-            output.writeSerializableElementValue(
-                serialClassDesc, 3,
-                JsonRpcIDSerializer, obj.id
-            )
-        }
-
-        output.writeEnd(serialClassDesc)
-    }
-}
-
-internal object RawRequestLoader : KSerialLoader<Request<JsonElement>> {
-    override fun load(input: KInput): Request<JsonElement> {
-        val tree = try {
-            input.to<JsonObject>()
+internal open class RequestReader<P : Any>(private val paramsReader: JsonReader<P>) :
+    JsonReader<Request<P>>() {
+    override fun read(json: JsonElement): Request<P> {
+        val jsonObject = try {
+            json.jsonObject
         } catch (e: Exception) {
             throw JsonParseException("Error parsing JSON to tree: ${e.message}")
         }
 
         // Try to parse the ID first so we can make a best effort to include it in error messages
-        val id = tree.getPrimitiveOrNull("id")?.readJsonRpcID()
+        val id = jsonObject.getPrimitiveOrNull(ID)?.let { JsonRpcIDReader.read(it) }
 
         val method = try {
-            tree.checkJsonrpc()
-            tree.getRequired<JsonLiteral>("method", JsonObject::getPrimitive).content
+            jsonObject.checkJsonrpc()
+            jsonObject.getPrimitive(METHOD).content
         } catch (e: Exception) {
-            throw InvalidRequestException(
-                "Invalid JSON-RPC Request: ${e.message}",
-                id
-            )
+            throw InvalidRequestException("Invalid JSON-RPC Request: ${e.message}", id)
         }
 
-        val paramsElement = tree.getOrNull("params")
-        val params: JsonElement? = paramsElement?.let { elem ->
+        val paramsElement = jsonObject.getOrNull(PARAMS)
+        val params: P? = paramsElement?.let { elem ->
             when (elem) {
-                is JsonObject, is JsonArray -> elem
+                is JsonObject, is JsonArray -> paramsReader.read(elem)
                 else -> throw InvalidRequestException(
                     "\"params\" must be omitted or contain JSON Object or Array",
                     id
@@ -86,12 +56,20 @@ internal object RawRequestLoader : KSerialLoader<Request<JsonElement>> {
             }
         }
 
-        return id?.let { ClientRequest(method, params, id) }
-                ?: Notification(method, params)
+        return id?.let { ClientRequest(method, params, id) } ?: Notification(method, params)
     }
+}
 
-    override fun update(input: KInput, old: Request<JsonElement>): Request<JsonElement> =
-        throw UnsupportedOperationException("Update not supported")
+internal open class RequestWriter<P : Any>(private val paramsWriter: JsonWriter<P>) :
+    JsonWriter<Request<P>>() {
+    override fun write(value: Request<P>) = json {
+        JSONRPC to value.jsonrpc
+        METHOD to value.method
+        value.params?.let { PARAMS to paramsWriter.write(it) }
+        if (value is ClientRequest<P>) {
+            ID to JsonRpcIDWriter.write(value.id)
+        }
+    }
 }
 
 internal fun <I : Request<JsonElement>, O : Request<P>, P> I.parseParams(
@@ -126,31 +104,6 @@ private fun <I : Request<JsonElement>, O : Request<P>, P> I.tryParseParams(
     }
 
     return this.toType(params)
-}
-
-internal class RequestLoader<P>(
-    private val paramsParser: (JsonElement) -> P
-) : KSerialLoader<Request<P>> {
-
-    override fun load(input: KInput): Request<P> {
-        val rawRequest = RawRequestLoader.load(input)
-        return rawRequest.tryParseParams(paramsParser) { parsedParams: P? ->
-            when (this) {
-                is ClientRequest -> ClientRequest(
-                    method,
-                    parsedParams,
-                    id
-                )
-                is Notification -> Notification(
-                    method,
-                    parsedParams
-                )
-            }
-        }
-    }
-
-    override fun update(input: KInput, old: Request<P>): Request<P> =
-        throw UnsupportedOperationException("Update not supported")
 }
 
 internal fun convertToError(e: Exception): RequestError {

@@ -1,18 +1,16 @@
 package com.github.kmpp.jsonrpc
 
 import com.github.kmpp.jsonrpc.internal.readAndHandleRequest0
-import kotlinx.serialization.KSerialLoader
-import kotlinx.serialization.KSerialSaver
 
-interface JsonRpcRequestHandler<P, R> {
-    val requestReader: KSerialLoader<Request<P>>
-    val resultWriter: KSerialSaver<Response<R>>
+interface JsonRpcRequestHandler<P : Any, R : Any> {
+    val requestReader: JsonReader<Request<P>>
+    val resultWriter: JsonWriter<Response<R>>
 
     fun readAndHandleRequest(json: String): Response<R>? = readAndHandleRequest0(json)
 
-    fun writeResponse(response: Response<R>): String = resultWriter.save(response)
+    fun writeResponse(response: Response<R>): String = resultWriter.write(response).toString()
 
-    fun readRequest(json: String): ReadOutcome<Request<P>> = requestReader.load(json)
+    fun readRequest(json: String): ReadOutcome<Request<P>> = requestReader.readOutcome(json)
 
     fun handleRequest(request: Request<P>): Response<R>?
 
@@ -24,7 +22,7 @@ interface JsonRpcRequestHandler<P, R> {
     fun handleError(error: Error): Error = error
 }
 
-interface JsonRpcRequestResponder<P, R> {
+interface JsonRpcRequestResponder<P : Any, R : Any> {
     val handler: JsonRpcRequestHandler<P, R>
 
     fun respondToRequest(json: String): String? {

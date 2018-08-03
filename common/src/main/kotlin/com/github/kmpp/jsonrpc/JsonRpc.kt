@@ -1,13 +1,14 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.ErrorWriter
 import com.github.kmpp.jsonrpc.internal.toErrorObject
 import kotlinx.serialization.json.JsonElement
 
 
-const val JSON_RPC = "2.0"
+const val JSON_RPC_2_0 = "2.0"
 
 sealed class JsonRpc(
-    val jsonrpc: String = JSON_RPC
+    val jsonrpc: String = JSON_RPC_2_0
 )
 
 sealed class Request<P>(
@@ -98,7 +99,7 @@ sealed class RequestError(
         Error(this.toErrorObject(), id)
     }
     val errorJsonString: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        saveErrorJson(error)
+        ErrorWriter.write(error).toString()
     }
 }
 

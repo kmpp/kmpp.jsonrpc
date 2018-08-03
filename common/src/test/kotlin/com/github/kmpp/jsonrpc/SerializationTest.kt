@@ -1,5 +1,8 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.ErrorObjectLoader
+import com.github.kmpp.jsonrpc.internal.ErrorObjectSaver
+import com.github.kmpp.jsonrpc.internal.JSON_TREE_MAPPER
 import com.github.kmpp.jsonrpc.internal.JsonRpcIDSerializer
 import com.github.kmpp.jsonrpc.internal.RequestLoader
 import kotlinx.serialization.KSerialLoader
@@ -8,8 +11,11 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Optional
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JSON
+import kotlinx.serialization.json.JsonLiteral
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonTreeParser
+import kotlinx.serialization.json.double
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -75,24 +81,22 @@ class SerializationTest {
         )
     }
 
-    /*
     @Test
     fun testJsonRpcErrorObjectSerialization() {
-        val saver = ErrorObjectSaver(Data.serializer())
-        val loader =
-            ErrorObjectLoader.withDataReader(Data.serializer().tree)
+        val saver = ErrorObjectSaver
+        val loader = ErrorObjectLoader
 
-        roundtrip(saver, loader, ErrorObject<Data>(42, message = "message", data = null))
-        roundtrip(saver, loader, ErrorObject(42, message = "message", data = Data()))
+        roundtrip(saver, loader, ErrorObject(42, message = "message", data = null))
+        val dataTree = JSON_TREE_MAPPER.writeTree(Data(), Data.serializer())
+        roundtrip(saver, loader, ErrorObject(42, message = "message", data = dataTree))
         assertEquals(
             roundtrip(saver, loader, """{"code":42,"message":"message"}"""),
-            ErrorObject<Data>(code = 42, message = "message", data = null)
+            ErrorObject(code = 42, message = "message", data = null)
         )
 
-        val serverErrorObject = serverError(-32099, Data())
+        val serverErrorObject = serverError(-32099, dataTree)
         roundtrip(saver, loader, serverErrorObject)
     }
-    */
 
     @Serializable
     private data class Result(
@@ -169,8 +173,32 @@ class SerializationTest {
         roundtrip(serializer, serializer, obj)
 
     private fun <T> roundtrip(saver: KSerialSaver<T>, loader: KSerialLoader<T>, obj: T) {
+        try {
+            obj as ErrorObject
+            println("data class: ${obj.data!!::class}")
+        } catch (e: Exception) {
+
+        }
         val str = JSON.stringify(saver, obj)
+        println("stringified to: $str")
         val parsed = JSON.parse(loader, str)
+        println("parsed to: $parsed")
+        try {
+            parsed as ErrorObject
+            val parsedData = parsed.data!! as JsonObject
+            obj as ErrorObject
+            val objData = obj.data!! as JsonObject
+            println("parsed class: ${parsed.data!!::class}")
+            println("data matches: ${parsed.data!! == obj.data!!}")
+            println("d matches: ${parsedData.content["d"] == objData.content["d"]}")
+            println("${parsedData.content["d"]!!::class}, ${objData.content["d"]!!::class}")
+            println("${parsedData.content["d"]!!.double}, ${objData.content["d"]!!.double}")
+            println("${parsedData.content["d"]!!.double == objData.content["d"]!!.double}")
+            println("parsed match: ${parsedData.content["d"]!! == JsonLiteral(123.456)}")
+            println("obj match: ${objData.content["d"]!! == JsonLiteral(123.456)}")
+        } catch (e: Exception) {
+
+        }
         assertEquals(obj, parsed)
     }
 

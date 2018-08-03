@@ -1,5 +1,7 @@
 package com.github.kmpp.jsonrpc
 
+import com.github.kmpp.jsonrpc.internal.IntParser
+import com.github.kmpp.jsonrpc.internal.ResponseParser
 import com.github.kmpp.jsonrpc.internal.json
 import kotlinx.serialization.KSerialLoader
 import kotlinx.serialization.Serializable
@@ -15,7 +17,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class JsonRpcApiTest {
-    private val responseSaver = getResponseSaver(IntSerializer)
+    private val responseSaver = ResponseParser(IntParser)
 
     @Serializable
     data class IntInput(val input: Int = 0)
@@ -120,7 +122,7 @@ class JsonRpcApiTest {
                     intList?.sum() ?: 0
                 }
                 checkExpected(expected, sumResult)
-                responseSaver.save(sumResult)
+                responseSaver.write(sumResult).toString()
             }
             "subtract" -> {
                 if (request.params == null) {
@@ -130,7 +132,7 @@ class JsonRpcApiTest {
                             request.id
                         )
                     checkExpected(expected, error)
-                    return responseSaver.save(error)
+                    return responseSaver.write(error).toString()
                 }
 
                 val subtractResult: Response<Int> = when (request.params) {
@@ -157,7 +159,7 @@ class JsonRpcApiTest {
                     }
                 }
                 checkExpected(expected, subtractResult)
-                responseSaver.save(subtractResult)
+                responseSaver.write(subtractResult).toString()
             }
             "square" -> {
                 val squareResult =
@@ -165,14 +167,14 @@ class JsonRpcApiTest {
                         input?.let { it.input * it.input } ?: 0
                     }
                 checkExpected(expected, squareResult)
-                responseSaver.save(squareResult)
+                responseSaver.write(squareResult).toString()
             }
             else -> {
                 val errorObject = methodNotFound(request.method.json())
                 println("<** ERROR  : $errorObject")
                 val error = Error(errorObject, request.id)
                 checkExpected(expected, error)
-                responseSaver.save(error)
+                responseSaver.write(error).toString()
             }
         }
     }

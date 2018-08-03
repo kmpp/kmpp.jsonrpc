@@ -1,57 +1,36 @@
 package com.github.kmpp.jsonrpc.internal
 
+import com.github.kmpp.jsonrpc.JsonReader
 import com.github.kmpp.jsonrpc.JsonRpcID
 import com.github.kmpp.jsonrpc.JsonRpcNullID
 import com.github.kmpp.jsonrpc.JsonRpcNumberID
 import com.github.kmpp.jsonrpc.JsonRpcStringID
-import kotlinx.serialization.KInput
-import kotlinx.serialization.KOutput
-import kotlinx.serialization.KSerialClassDesc
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.internal.SerialClassDescImpl
-import kotlinx.serialization.json.JSON
+import com.github.kmpp.jsonrpc.JsonWriter
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonLiteral
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonPrimitive
 
-internal fun JsonElement.readJsonRpcID(): JsonRpcID = when (this) {
-    is JsonPrimitive -> readJsonRpcID()
-    else -> throw SerializationException("Could not read $this as JsonRpcID")
-}
-
-private fun JsonPrimitive.readJsonRpcID(): JsonRpcID {
-    println("Running readJsonRpcID on $this")
-    return when (this) {
-        is JsonNull -> JsonRpcNullID
-        is JsonLiteral -> if (isString()) {
-            println("reading as string")
-            JsonRpcStringID(content)
-        } else {
-            println("reading as number")
-            JsonRpcNumberID(long)
-        }
+internal object JsonRpcIDWriter : JsonWriter<JsonRpcID>() {
+    override fun write(value: JsonRpcID): JsonElement = when (value) {
+        is JsonRpcStringID -> JsonLiteral(value.id)
+        is JsonRpcNumberID -> JsonLiteral(value.id)
+        is JsonRpcNullID -> JsonNull
     }
 }
 
-private fun JsonPrimitive.isString(): Boolean = toString().startsWith('"')
+internal object JsonRpcIDReader : JsonReader<JsonRpcID>() {
+    override fun read(json: JsonElement): JsonRpcID {
+        val jsonPrimitive = json.primitive
 
-internal object JsonRpcIDSerializer : KSerializer<JsonRpcID> {
-    override fun save(output: KOutput, obj: JsonRpcID) {
-        when (obj) {
-            is JsonRpcStringID -> output.writeStringValue(obj.id)
-            is JsonRpcNumberID -> output.writeLongValue(obj.id)
-            is JsonRpcNullID -> output.writeNullValue()
+        return when (jsonPrimitive) {
+            is JsonLiteral -> {
+                if (jsonPrimitive.toString().startsWith('"')) {
+                    JsonRpcStringID(jsonPrimitive.content)
+                } else {
+                    JsonRpcNumberID(jsonPrimitive.long)
+                }
+            }
+            is JsonNull -> JsonRpcNullID
         }
     }
-
-    override fun load(input: KInput): JsonRpcID {
-        val jsonReader = input as? JSON.JsonInput
-                ?: throw SerializationException("This class can be loaded only by JSON")
-        return jsonReader.readAsTree().readJsonRpcID()
-    }
-
-    override val serialClassDesc: KSerialClassDesc =
-        SerialClassDescImpl("com.github.kmpp.jsonrpc.JsonRpcID")
 }
